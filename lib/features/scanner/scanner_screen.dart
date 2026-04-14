@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 import '../../data/repositories/scans_repository.dart';
 import 'perspective_correct.dart';
 import 'scan_pipeline.dart';
@@ -47,7 +48,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cams.first);
     final c = CameraController(back, ResolutionPreset.high,
-        enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
+        enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420);
     await c.initialize();
     if (!mounted) return;
     setState(() => _controller = c);
@@ -58,7 +59,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
     if (_busy || _state.value.paused) return;
     _busy = true;
     try {
-      final bytes = _jpegFromFrame(img);
+      final bytes = _bgrJpegFromFrame(img);
       if (bytes == null) return;
       final rect = detectCardRect(bytes);
       if (rect == null) {
@@ -91,9 +92,45 @@ class _ScannerBodyState extends State<_ScannerBody> {
     }
   }
 
-  Uint8List? _jpegFromFrame(CameraImage img) {
-    if (img.format.group != ImageFormatGroup.jpeg) return null;
-    return img.planes.first.bytes;
+  Uint8List? _bgrJpegFromFrame(CameraImage img) {
+    if (img.format.group != ImageFormatGroup.yuv420) return null;
+    final w = img.width;
+    final h = img.height;
+    if (w <= 0 || h <= 0 || img.planes.length < 3) return null;
+    final yP = img.planes[0];
+    final uP = img.planes[1];
+    final vP = img.planes[2];
+
+    final halfW = w ~/ 2;
+    final halfH = h ~/ 2;
+    final i420 = Uint8List(w * h + halfW * halfH * 2);
+    var o = 0;
+    for (var row = 0; row < h; row++) {
+      i420.setRange(o, o + w, yP.bytes, row * yP.bytesPerRow);
+      o += w;
+    }
+    final uPs = uP.bytesPerPixel ?? 1;
+    for (var row = 0; row < halfH; row++) {
+      final base = row * uP.bytesPerRow;
+      for (var col = 0; col < halfW; col++) {
+        i420[o++] = uP.bytes[base + col * uPs];
+      }
+    }
+    final vPs = vP.bytesPerPixel ?? 1;
+    for (var row = 0; row < halfH; row++) {
+      final base = row * vP.bytesPerRow;
+      for (var col = 0; col < halfW; col++) {
+        i420[o++] = vP.bytes[base + col * vPs];
+      }
+    }
+
+    final mat =
+        cv.Mat.fromList(h + halfH, w, cv.MatType.CV_8UC1, i420);
+    final bgr = cv.cvtColor(mat, cv.COLOR_YUV2BGR_I420);
+    final (_, jpg) = cv.imencode('.jpg', bgr);
+    mat.dispose();
+    bgr.dispose();
+    return jpg;
   }
 
   @override
