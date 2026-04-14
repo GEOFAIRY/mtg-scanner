@@ -18,7 +18,8 @@ class PrintingPicker extends StatefulWidget {
 }
 
 class _PrintingPickerState extends State<PrintingPicker> {
-  late Future<List<ScryfallCard>> _future = widget.scry.printingsOfName(widget.name);
+  late final Future<List<ScryfallCard>> _future =
+      widget.scry.printingsOfName(widget.name);
 
   @override
   Widget build(BuildContext context) {

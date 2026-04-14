@@ -73,7 +73,7 @@ class _ManualAddScreenState extends State<ManualAddScreen> {
                     scry: widget.scry,
                     onPick: (card) async {
                       await widget.collection.addFromScryfall(card, foil: _foil);
-                      if (!mounted) return;
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Added ${card.name} (${card.set.toUpperCase()})')),
                       );
