@@ -8,6 +8,7 @@ import 'data/repositories/collection_repository.dart';
 import 'data/repositories/scans_repository.dart';
 import 'features/shell/app_shell.dart';
 import 'features/scanner/ocr_runner.dart';
+import 'features/scanner/scan_matcher.dart';
 import 'features/scanner/scan_pipeline.dart';
 import 'features/scanner/scan_writer.dart';
 import 'features/scanner/scanner_screen.dart';
@@ -30,13 +31,20 @@ class Deps {
   factory Deps.create() {
     final db = AppDatabase();
     final scry = ScryfallClient(http.Client());
+    final collection = CollectionRepository(db, scry);
+    final scans = ScansRepository(db);
     final pipeline = ScanPipeline(
       ocr: MlKitOcrRunner(),
       writer: ScanWriter(db),
       storage: ThumbnailStorage(),
+      matcher: ScanMatcher(
+        scry: scry,
+        collection: collection,
+        scans: scans,
+        db: db,
+      ),
     );
-    return Deps._(
-        db, scry, CollectionRepository(db, scry), ScansRepository(db), pipeline);
+    return Deps._(db, scry, collection, scans, pipeline);
   }
 }
 

@@ -5,12 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mtg_scanner/data/db/database.dart';
 import 'package:mtg_scanner/features/scanner/ocr_runner.dart';
+import 'package:mtg_scanner/features/scanner/parsed_ocr.dart';
+import 'package:mtg_scanner/features/scanner/scan_matcher.dart';
 import 'package:mtg_scanner/features/scanner/scan_pipeline.dart';
 import 'package:mtg_scanner/features/scanner/scan_writer.dart';
 import 'package:mtg_scanner/features/scanner/thumbnail_storage.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 class _FakeOcr extends Mock implements OcrRunner {}
+
+class _FakeMatcher extends Mock implements ScanMatcher {}
 
 class _FakePathProvider extends PathProviderPlatform {
   _FakePathProvider(this.dir);
@@ -32,6 +36,8 @@ void main() {
     registerFallbackValue(
         const OcrRegion(left: 0, top: 0, width: 1, height: 1));
     registerFallbackValue(Uint8List(0));
+    registerFallbackValue(
+        ParsedOcr.from(rawName: '', rawSetCollector: ''));
   });
   tearDown(() async {
     await db.close();
@@ -44,10 +50,16 @@ void main() {
       return region.top < 0.5 ? 'Lightning Bolt' : '2xm 137';
     });
 
+    final matcher = _FakeMatcher();
+    when(() => matcher.matchAfterInsert(
+            scanId: any(named: 'scanId'), parsed: any(named: 'parsed')))
+        .thenAnswer((_) async {});
+
     final pipeline = ScanPipeline(
       ocr: ocr,
       writer: ScanWriter(db),
       storage: ThumbnailStorage(),
+      matcher: matcher,
     );
 
     final fakePng = Uint8List.fromList(List.filled(32, 0x89));
@@ -61,5 +73,9 @@ void main() {
     expect(row.status, 'pending');
     expect(row.cropImagePath, isNotNull);
     expect(File(row.cropImagePath!).existsSync(), isTrue);
+
+    await Future<void>.delayed(Duration.zero);
+    verify(() => matcher.matchAfterInsert(
+        scanId: res.id, parsed: any(named: 'parsed'))).called(1);
   });
 }
