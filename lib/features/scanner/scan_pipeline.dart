@@ -20,13 +20,16 @@ class ScanPipeline {
       OcrRegion(left: 0.04, top: 0.92, width: 0.40, height: 0.05);
 
   /// Caller supplies an upright card PNG (already perspective-corrected).
-  /// Persists a pending scan row and returns its id.
-  Future<int> captureFromWarpedCrop(Uint8List uprightPng) async {
+  /// Persists a pending scan row and returns its id plus a display label.
+  Future<({int id, String label})> captureFromWarpedCrop(
+      Uint8List uprightPng) async {
     final rawName = await ocr.recognizeRegion(uprightPng, _nameRegion);
     final rawSet = await ocr.recognizeRegion(uprightPng, _setRegion);
     final parsed =
         ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
     final thumbPath = await storage.save(uprightPng);
-    return writer.insertPending(parsed: parsed, thumbPath: thumbPath);
+    final id = await writer.insertPending(parsed: parsed, thumbPath: thumbPath);
+    final label = parsed.name.isNotEmpty ? parsed.name : 'scan';
+    return (id: id, label: label);
   }
 }

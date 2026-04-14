@@ -51,10 +51,11 @@ void main() {
     );
 
     final fakePng = Uint8List.fromList(List.filled(32, 0x89));
-    final id = await pipeline.captureFromWarpedCrop(fakePng);
+    final res = await pipeline.captureFromWarpedCrop(fakePng);
 
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
+    final row = await (db.select(db.scans)..where((t) => t.id.equals(res.id)))
         .getSingle();
+    expect(res.label, 'Lightning Bolt');
     expect(row.rawName, 'Lightning Bolt');
     expect(row.rawSetCollector, '2xm 137');
     expect(row.status, 'pending');
