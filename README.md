@@ -1,17 +1,22 @@
-# mtg_scanner
+# MTG Scanner
 
-A new Flutter project.
+Free, login-free Android app for cataloging Magic: The Gathering cards and exporting to Moxfield.
 
-## Getting Started
+## Plan A (current): manual add + collection + export
 
-This project is a starting point for a Flutter application.
+- Search by name (Scryfall autocomplete)
+- Pick exact printing
+- View collection with live prices and totals
+- Export to Moxfield text or CSV
+- JSON backup
 
-A few resources to get you started if this is your first Flutter project:
+## Plan B (upcoming)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- Camera scanning with OCR + foil detection
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Dev
+
+    flutter pub get
+    dart run build_runner build --delete-conflicting-outputs
+    flutter test
+    flutter run
