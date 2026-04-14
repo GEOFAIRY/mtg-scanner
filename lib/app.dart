@@ -7,7 +7,11 @@ import 'data/scryfall/scryfall_client.dart';
 import 'data/repositories/collection_repository.dart';
 import 'data/repositories/scans_repository.dart';
 import 'features/shell/app_shell.dart';
-import 'features/scanner/scanner_placeholder_screen.dart';
+import 'features/scanner/ocr_runner.dart';
+import 'features/scanner/scan_pipeline.dart';
+import 'features/scanner/scan_writer.dart';
+import 'features/scanner/scanner_screen.dart';
+import 'features/scanner/thumbnail_storage.dart';
 import 'features/review_queue/review_queue_screen.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/collection/manual_add_screen.dart';
@@ -16,16 +20,23 @@ import 'features/export/export_screen.dart';
 import 'features/settings/settings_screen.dart';
 
 class Deps {
-  Deps._(this.db, this.scry, this.collection, this.scans);
+  Deps._(this.db, this.scry, this.collection, this.scans, this.pipeline);
   final AppDatabase db;
   final ScryfallClient scry;
   final CollectionRepository collection;
   final ScansRepository scans;
+  final ScanPipeline pipeline;
 
   factory Deps.create() {
     final db = AppDatabase();
     final scry = ScryfallClient(http.Client());
-    return Deps._(db, scry, CollectionRepository(db, scry), ScansRepository(db));
+    final pipeline = ScanPipeline(
+      ocr: MlKitOcrRunner(),
+      writer: ScanWriter(db),
+      storage: ThumbnailStorage(),
+    );
+    return Deps._(
+        db, scry, CollectionRepository(db, scry), ScansRepository(db), pipeline);
   }
 }
 
@@ -44,7 +55,10 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
         builder: (ctx, state, child) =>
             AppShell(location: state.matchedLocation, child: child),
         routes: [
-          GoRoute(path: '/scan', builder: (_, __) => const ScannerPlaceholderScreen()),
+          GoRoute(
+              path: '/scan',
+              builder: (_, __) =>
+                  ScannerScreen(scans: deps.scans, pipeline: deps.pipeline)),
           GoRoute(
               path: '/queue',
               builder: (_, __) => ReviewQueueScreen(
