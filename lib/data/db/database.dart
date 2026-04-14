@@ -4,11 +4,12 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'daos/collection_dao.dart';
+import 'daos/scans_dao.dart';
 import 'tables.dart';
 
 part 'database.g.dart';
 
-@DriftDatabase(tables: [Scans, Collection], daos: [CollectionDao])
+@DriftDatabase(tables: [Scans, Collection], daos: [CollectionDao, ScansDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_open());
   AppDatabase.forTesting(QueryExecutor e) : super(e);

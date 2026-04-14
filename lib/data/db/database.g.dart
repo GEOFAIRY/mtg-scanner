@@ -1650,6 +1650,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ScansTable scans = $ScansTable(this);
   late final $CollectionTable collection = $CollectionTable(this);
   late final CollectionDao collectionDao = CollectionDao(this as AppDatabase);
+  late final ScansDao scansDao = ScansDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
