@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../data/db/database.dart';
 
@@ -18,7 +19,8 @@ class ReviewQueueItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = scan.matchedName ?? '(unmatched)';
+    final name = scan.matchedName ??
+        (scan.rawName.trim().isEmpty ? '(unmatched)' : 'OCR: ${scan.rawName}');
     final setNum = scan.matchedSet == null
         ? scan.rawSetCollector
         : '${scan.matchedSet!.toUpperCase()} · ${scan.matchedCollectorNumber ?? '?'}';
@@ -29,6 +31,15 @@ class ReviewQueueItemTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
+            leading: scan.cropImagePath != null &&
+                    File(scan.cropImagePath!).existsSync()
+                ? SizedBox(
+                    width: 48,
+                    height: 64,
+                    child: Image.file(File(scan.cropImagePath!),
+                        fit: BoxFit.cover),
+                  )
+                : const SizedBox(width: 48, height: 64),
             title: Text(name),
             subtitle: Text('$setNum · ${(scan.confidence * 100).toStringAsFixed(0)}%'
                 '${price == null ? "" : "  ·  \$${price.toStringAsFixed(2)}"}'),

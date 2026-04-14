@@ -10,39 +10,43 @@ class RectCandidate {
 
 RectCandidate? detectCardRect(
   Uint8List frameBytes, {
-  double minAreaFraction = 0.15,
+  double minAreaFraction = 0.06,
 }) {
   final src = cv.imdecode(frameBytes, cv.IMREAD_COLOR);
   final gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
   final blurred = cv.gaussianBlur(gray, (5, 5), 0);
-  final edges = cv.canny(blurred, 50, 150);
+  final edges = cv.canny(blurred, 30, 90);
   final (contours, _) =
-      cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      cv.findContours(edges, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
   final frameArea = src.width * src.height.toDouble();
   RectCandidate? best;
   for (var i = 0; i < contours.length; i++) {
     final c = contours[i];
     final peri = cv.arcLength(c, true);
-    final approx = cv.approxPolyDP(c, 0.02 * peri, true);
-    if (approx.length != 4) continue;
-    final area = cv.contourArea(approx);
-    if (area < frameArea * minAreaFraction) continue;
-    if (best != null && area <= best.areaPx) continue;
-    final points = <({double x, double y})>[
-      for (var j = 0; j < 4; j++)
-        (x: approx[j].x.toDouble(), y: approx[j].y.toDouble()),
-    ];
-    points.sort((a, b) => (a.y + a.x).compareTo(b.y + b.x));
-    final tl = points.first, br = points.last;
-    final mid = [points[1], points[2]]..sort((a, b) => a.x.compareTo(b.x));
-    final bl = mid.first, tr = mid.last;
-    best = RectCandidate(CardQuad(tl, tr, br, bl), area);
+    if (peri < 50) continue;
+    for (final eps in const [0.02, 0.035, 0.05]) {
+      final approx = cv.approxPolyDP(c, eps * peri, true);
+      if (approx.length != 4) continue;
+      final area = cv.contourArea(approx);
+      if (area < frameArea * minAreaFraction) continue;
+      if (best != null && area <= best.areaPx) continue;
+      final points = <({double x, double y})>[
+        for (var j = 0; j < 4; j++)
+          (x: approx[j].x.toDouble(), y: approx[j].y.toDouble()),
+      ];
+      points.sort((a, b) => (a.y + a.x).compareTo(b.y + b.x));
+      final tl = points.first, br = points.last;
+      final mid = [points[1], points[2]]..sort((a, b) => a.x.compareTo(b.x));
+      final bl = mid.first, tr = mid.last;
+      best = RectCandidate(CardQuad(tl, tr, br, bl), area);
+      break;
+    }
   }
   return best;
 }
 
 class StabilityTracker {
-  StabilityTracker({this.windowSize = 5, this.maxPxJitter = 5.0});
+  StabilityTracker({this.windowSize = 3, this.maxPxJitter = 25.0});
   final int windowSize;
   final double maxPxJitter;
   final List<CardQuad> _history = [];

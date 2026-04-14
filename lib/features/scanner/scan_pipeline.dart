@@ -15,9 +15,9 @@ class ScanPipeline {
   final ThumbnailStorage storage;
 
   static const _nameRegion =
-      OcrRegion(left: 0.04, top: 0.03, width: 0.70, height: 0.08);
+      OcrRegion(left: 0.02, top: 0.02, width: 0.96, height: 0.14);
   static const _setRegion =
-      OcrRegion(left: 0.04, top: 0.92, width: 0.40, height: 0.05);
+      OcrRegion(left: 0.02, top: 0.86, width: 0.60, height: 0.12);
 
   /// Caller supplies an upright card PNG (already perspective-corrected).
   /// Persists a pending scan row and returns its id plus a display label.
