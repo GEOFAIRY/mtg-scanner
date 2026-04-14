@@ -20,3 +20,8 @@ Free, login-free Android app for cataloging Magic: The Gathering cards and expor
     dart run build_runner build --delete-conflicting-outputs
     flutter test
     flutter run
+
+On Windows, prefer `powershell -File tool\flutter.ps1 <args>` over bare
+`flutter` — it kills stale host processes and clears `build\native_assets\
+windows\sqlite3.dll` before each run, avoiding intermittent errno-183
+copy failures after a crashed test/run.
