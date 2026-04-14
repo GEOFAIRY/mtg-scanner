@@ -1,0 +1,8 @@
+{
+  "id": "e3285e6b-3e79-4d7c-bf96-d920f973b122",
+  "name": "Lightning Bolt",
+  "set": "2xm",
+  "collector_number": "137",
+  "prices": {"usd": "1.80", "usd_foil": "6.50"},
+  "image_uris": {"small": "https://img/s.jpg", "normal": "https://img/n.jpg"}
+}
