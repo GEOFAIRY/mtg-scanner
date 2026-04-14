@@ -42,14 +42,21 @@ void main() {
     await t.pumpWidget(MaterialApp(
         home: ReviewQueueScreen(
             scans: scansRepo, collection: collection, scry: scry)));
-    await t.pumpAndSettle();
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('Lightning Bolt'), findsOneWidget);
     await t.tap(find.text('Confirm'));
-    await t.pump(const Duration(seconds: 1));
-    await t.pumpAndSettle();
+    for (var i = 0; i < 20; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('Nothing to review'), findsOneWidget);
     final inCollection = await db.select(db.collection).get();
     expect(inCollection, hasLength(1));
     expect(inCollection.single.name, 'Lightning Bolt');
+    // Dispose StreamBuilder before DB tearDown so drift's cancellation
+    // Timer fires inside the test zone.
+    await t.pumpWidget(const SizedBox.shrink());
+    await t.pump(const Duration(milliseconds: 100));
   });
 }

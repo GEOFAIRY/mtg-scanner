@@ -12,7 +12,7 @@ part 'database.g.dart';
 @DriftDatabase(tables: [Scans, Collection], daos: [CollectionDao, ScansDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_open());
-  AppDatabase.forTesting(QueryExecutor e) : super(e);
+  AppDatabase.forTesting(super.e);
 
   @override
   int get schemaVersion => 1;
