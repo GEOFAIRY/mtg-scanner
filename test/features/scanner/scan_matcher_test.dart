@@ -24,6 +24,9 @@ void main() {
   setUp(() {
     scry = _FakeScry();
     matcher = ScanMatcher(scry: scry);
+    // Default: autocomplete returns nothing, so the rescue path is a no-op
+    // unless a test overrides it.
+    when(() => scry.autocomplete(any())).thenAnswer((_) async => <String>[]);
   });
 
   test('name+cn lookup wins even when set code is present', () async {
@@ -84,6 +87,39 @@ void main() {
     final r = await matcher
         .match(ParsedOcr.from(rawName: 'Gibberish', rawSetCollector: ''));
     expect(r, isNull);
+  });
+
+  test('autocomplete rescue recovers when OCR name is close but wrong', () async {
+    // Simulate a retro/showcase card where the name region OCRs "Lghtning Blt"
+    // but the collector number came through cleanly.
+    when(() => scry.cardsByNameAndCollectorNumber('Lghtning Blt', '137'))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardBySetAndNumber('2XM', '137'))
+        .thenThrow(ScryfallNotFound('2xm/137'));
+    when(() => scry.cardByFuzzyName('Lghtning Blt'))
+        .thenThrow(ScryfallNotFound('fuzzy'));
+    when(() => scry.autocomplete('Lghtning Blt'))
+        .thenAnswer((_) async => ['Lightning Bolt']);
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
+        .thenAnswer((_) async => [_card()]);
+
+    final r = await matcher.match(
+        ParsedOcr.from(rawName: 'Lghtning Blt', rawSetCollector: '2xm 137'));
+    expect(r, isNotNull);
+    expect(r!.name, 'Lightning Bolt');
+  });
+
+  test('autocomplete rescue falls back to fuzzy when no cn candidates', () async {
+    when(() => scry.cardByFuzzyName('Lghtning Blt'))
+        .thenThrow(ScryfallNotFound('fuzzy'));
+    when(() => scry.autocomplete('Lghtning Blt'))
+        .thenAnswer((_) async => ['Lightning Bolt']);
+    when(() => scry.cardByFuzzyName('Lightning Bolt'))
+        .thenAnswer((_) async => _card());
+
+    final r = await matcher
+        .match(ParsedOcr.from(rawName: 'Lghtning Blt', rawSetCollector: ''));
+    expect(r, isNotNull);
   });
 
   test('returns null when name empty and no set+collector', () async {

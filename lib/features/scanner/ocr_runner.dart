@@ -33,7 +33,13 @@ class MlKitOcrRunner implements OcrRunner {
     final y = (region.top * decoded.height).round();
     final w = (region.width * decoded.width).round();
     final h = (region.height * decoded.height).round();
-    final crop = img.copyCrop(decoded, x: x, y: y, width: w, height: h);
+    var crop = img.copyCrop(decoded, x: x, y: y, width: w, height: h);
+    // Full-art, showcase, and retro-frame cards render card text over
+    // low-contrast or textured backgrounds. Grayscale + contrast boost gives
+    // ML Kit a much cleaner signal before recognition.
+    crop = img.grayscale(crop);
+    crop = img.normalize(crop, min: 0, max: 255);
+    crop = img.contrast(crop, contrast: 140);
     final pngBytes = img.encodePng(crop);
     final temp = File(
         '${Directory.systemTemp.path}/ocr_${DateTime.now().microsecondsSinceEpoch}.png');
