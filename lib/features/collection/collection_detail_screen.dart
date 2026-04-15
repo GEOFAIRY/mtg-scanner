@@ -24,9 +24,32 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         builder: (ctx, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final r = snap.data!;
+          final imageUrl =
+              'https://api.scryfall.com/cards/${Uri.encodeComponent(r.setCode)}/${Uri.encodeComponent(r.collectorNumber)}?format=image&version=normal';
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    imageUrl,
+                    height: 360,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) => progress == null
+                        ? child
+                        : const SizedBox(
+                            height: 360,
+                            child: Center(child: CircularProgressIndicator())),
+                    errorBuilder: (_, __, ___) => const SizedBox(
+                        height: 360,
+                        child: Center(
+                            child: Icon(Icons.broken_image,
+                                size: 48, color: Colors.grey))),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(r.name, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text('${r.setCode.toUpperCase()} · ${r.collectorNumber}'),
