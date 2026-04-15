@@ -25,18 +25,24 @@ class ScanPipeline {
       OcrRegion(left: 0.02, top: 0.86, width: 0.60, height: 0.12);
 
   Future<({int id, String label})> captureFromWarpedCrop(
-      Uint8List uprightPng) async {
+      Uint8List uprightPng, {
+    bool forceFoil = false,
+  }) async {
     final rawName = await ocr.recognizeRegion(uprightPng, _nameRegion);
     final rawSet = await ocr.recognizeRegion(uprightPng, _setRegion);
     final parsed =
         ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
     final thumbPath = await storage.save(uprightPng);
     var foilGuess = 0;
-    try {
-      final sig = detectFoil(uprightPng);
-      foilGuess = sig.isFoil ? 1 : 0;
-    } catch (_) {
-      foilGuess = 0;
+    if (forceFoil) {
+      foilGuess = 1;
+    } else {
+      try {
+        final sig = detectFoil(uprightPng);
+        foilGuess = sig.isFoil ? 1 : 0;
+      } catch (_) {
+        foilGuess = 0;
+      }
     }
     final id = await writer.insertPending(
         parsed: parsed, thumbPath: thumbPath, foilGuess: foilGuess);

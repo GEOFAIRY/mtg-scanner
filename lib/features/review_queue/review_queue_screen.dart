@@ -5,8 +5,8 @@ import '../../data/repositories/collection_repository.dart';
 import '../../data/repositories/scans_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
-import 'review_queue_item_tile.dart';
 import 'edit_match_modal.dart';
+import 'review_queue_item_tile.dart';
 
 class ReviewQueueScreen extends StatelessWidget {
   const ReviewQueueScreen({
@@ -61,23 +61,12 @@ class ReviewQueueScreen extends StatelessWidget {
                   await (db.update(db.scans)..where((t) => t.id.equals(s.id)))
                       .write(ScansCompanion(foilGuess: d.Value(v ? 1 : 0)));
                 },
-                onEdit: () async {
-                  final picked = await Navigator.of(ctx).push<ScryfallCard>(
-                    MaterialPageRoute(
-                        builder: (_) => EditMatchModal(scry: scry)),
-                  );
-                  if (picked == null) return;
-                  await db.scansDao.updateMatch(
-                    s.id,
-                    scryfallId: picked.id,
-                    name: picked.name,
-                    setCode: picked.set,
-                    collectorNumber: picked.collectorNumber,
-                    confidence: 1.0,
-                    priceUsd: picked.prices.usd,
-                    priceUsdFoil: picked.prices.usdFoil,
-                  );
-                },
+                onEdit: () => Navigator.of(ctx).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        EditMatchModal(scan: s, db: db, scry: scry),
+                  ),
+                ),
               );
             },
           );
