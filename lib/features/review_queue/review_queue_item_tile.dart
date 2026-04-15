@@ -43,9 +43,18 @@ class ReviewQueueItemTile extends StatelessWidget {
             title: Text(name),
             subtitle: Text('$setNum · ${(scan.confidence * 100).toStringAsFixed(0)}%'
                 '${price == null ? "" : "  ·  \$${price.toStringAsFixed(2)}"}'),
-            trailing: Switch(
-              value: scan.foilGuess == 1,
-              onChanged: onToggleFoil,
+            trailing: FilterChip(
+              avatar: Icon(
+                Icons.auto_awesome,
+                size: 16,
+                color: scan.foilGuess == 1 ? Colors.black : null,
+              ),
+              label: const Text('Foil'),
+              selected: scan.foilGuess == 1,
+              onSelected: onToggleFoil,
+              selectedColor: const Color(0xFFECC460),
+              checkmarkColor: Colors.black,
+              showCheckmark: false,
             ),
           ),
           OverflowBar(
