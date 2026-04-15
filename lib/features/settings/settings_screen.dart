@@ -91,6 +91,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result != null) await widget.settings.setValueAlertThreshold(result);
   }
 
+  Future<void> _editThemeMode() async {
+    final current = widget.settings.themeMode;
+    final result = await showDialog<ThemeMode>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Theme'),
+        children: [
+          RadioGroup<ThemeMode>(
+            groupValue: current,
+            onChanged: (m) => Navigator.of(ctx).pop(m),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RadioListTile<ThemeMode>(
+                  value: ThemeMode.system,
+                  title: Text('System default'),
+                ),
+                RadioListTile<ThemeMode>(
+                  value: ThemeMode.light,
+                  title: Text('Light'),
+                ),
+                RadioListTile<ThemeMode>(
+                  value: ThemeMode.dark,
+                  title: Text('Dark'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (result != null) await widget.settings.setThemeMode(result);
+  }
+
+  String _themeModeLabel(ThemeMode mode) => switch (mode) {
+        ThemeMode.system => 'System default',
+        ThemeMode.light => 'Light',
+        ThemeMode.dark => 'Dark',
+      };
+
   @override
   Widget build(BuildContext context) {
     final backup = BackupRestoreService(widget.repo.db);
@@ -98,6 +138,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          ListTile(
+            title: const Text('Theme'),
+            subtitle: Text(_themeModeLabel(widget.settings.themeMode)),
+            leading: const Icon(Icons.brightness_6),
+            onTap: _editThemeMode,
+          ),
+          const Divider(),
           ListTile(
             title: const Text('Value alert threshold'),
             subtitle: Text(
