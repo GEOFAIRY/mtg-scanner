@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/features/scanner/parsed_ocr.dart';
+import 'package:mtg_card_scanner/features/scanner/parsed_ocr.dart';
 
 void main() {
   group('cleanName', () {
@@ -48,3 +48,4 @@ void main() {
     expect(p.collectorNumber, '137');
   });
 }
+

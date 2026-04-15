@@ -142,3 +142,4 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
     );
   }
 }
+

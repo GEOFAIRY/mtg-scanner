@@ -18,3 +18,4 @@ class Collection extends Table {
   TextColumn get rarity => text().nullable()();
   TextColumn get imageSmall => text().nullable()();
 }
+

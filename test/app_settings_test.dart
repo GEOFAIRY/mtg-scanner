@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/app_settings.dart';
+import 'package:mtg_card_scanner/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -36,3 +36,4 @@ void main() {
     expect(s.valueAlertThreshold, 1.0);
   });
 }
+

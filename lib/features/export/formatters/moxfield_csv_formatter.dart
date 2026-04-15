@@ -51,3 +51,4 @@ String formatMoxfieldCsv(List<MoxRow> rows, {DateTime? now}) {
   }
   return buf.toString();
 }
+

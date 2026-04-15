@@ -28,3 +28,4 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 }
+

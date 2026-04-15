@@ -152,3 +152,4 @@ class CollectionRepository {
       (_db.update(_db.collection)..where((t) => t.id.equals(id)))
           .write(CollectionCompanion(notes: Value(notes)));
 }
+

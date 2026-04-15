@@ -38,3 +38,4 @@ LazyDatabase _open() {
     return NativeDatabase.createInBackground(file);
   });
 }
+

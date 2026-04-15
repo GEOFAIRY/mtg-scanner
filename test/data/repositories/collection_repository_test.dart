@@ -1,10 +1,10 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:mtg_scanner/data/db/database.dart';
-import 'package:mtg_scanner/data/repositories/collection_repository.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_client.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_models.dart';
+import 'package:mtg_card_scanner/data/db/database.dart';
+import 'package:mtg_card_scanner/data/repositories/collection_repository.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_client.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_models.dart';
 
 class _FakeScry extends Mock implements ScryfallClient {}
 
@@ -12,6 +12,7 @@ ScryfallCard _card({
   String id = 'sid-1',
   String name = 'Lightning Bolt',
   String set = '2xm',
+  String setName = 'Double Masters',
   String collector = '137',
   String? rarity = 'uncommon',
   double? usd = 1.80,
@@ -21,6 +22,7 @@ ScryfallCard _card({
       id: id,
       name: name,
       set: set,
+      setName: setName,
       collectorNumber: collector,
       rarity: rarity,
       prices: ScryfallPrices(usd: usd, usdFoil: usdFoil),
@@ -112,3 +114,4 @@ void main() {
     expect(row.count, 5);
   });
 }
+

@@ -56,3 +56,4 @@ FoilSignal detectFoil(
 
   return FoilSignal(isFoil: isFoil, saturationScore: ratio);
 }
+

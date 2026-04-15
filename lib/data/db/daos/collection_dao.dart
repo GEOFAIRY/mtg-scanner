@@ -62,3 +62,4 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
     return (id: existing.id, wasInsertion: false);
   }
 }
+

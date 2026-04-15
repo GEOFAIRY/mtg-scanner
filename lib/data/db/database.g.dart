@@ -1331,3 +1331,4 @@ class $AppDatabaseManager {
   $$CollectionTableTableManager get collection =>
       $$CollectionTableTableManager(_db, _db.collection);
 }
+

@@ -24,3 +24,4 @@ class SetIcon extends StatelessWidget {
     );
   }
 }
+

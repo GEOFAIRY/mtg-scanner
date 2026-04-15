@@ -50,3 +50,4 @@ class MlKitOcrRunner implements OcrRunner {
   @override
   Future<void> dispose() => _recognizer.close();
 }
+

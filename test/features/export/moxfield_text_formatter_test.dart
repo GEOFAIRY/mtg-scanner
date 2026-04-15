@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/features/export/formatters/moxfield_text_formatter.dart';
+import 'package:mtg_card_scanner/features/export/formatters/moxfield_text_formatter.dart';
 
 void main() {
   test('formats basic rows', () {
@@ -22,3 +22,4 @@ void main() {
     expect(lines.single, '1 Island (NEO) 1');
   });
 }
+

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/features/scanner/thumbnail_storage.dart';
+import 'package:mtg_card_scanner/features/scanner/thumbnail_storage.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:path/path.dart' as p;
 
@@ -35,3 +35,4 @@ void main() {
     await storage.delete(path); // no throw
   });
 }
+

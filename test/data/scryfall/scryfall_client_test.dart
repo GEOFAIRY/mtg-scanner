@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_client.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_client.dart';
 
 class _MockHttp extends Mock implements http.Client {}
 
@@ -57,3 +57,4 @@ void main() {
     expect(times[1].difference(times[0]).inMilliseconds, greaterThanOrEqualTo(95));
   });
 }
+

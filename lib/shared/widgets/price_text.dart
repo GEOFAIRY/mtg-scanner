@@ -18,3 +18,4 @@ class PriceText extends StatelessWidget {
     );
   }
 }
+

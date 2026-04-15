@@ -92,3 +92,4 @@ class ScannerStateNotifier extends ValueNotifier<ScannerState> {
   void togglePause() => value = value.copyWith(paused: !value.paused);
   void toggleTorch() => value = value.copyWith(torchOn: !value.torchOn);
 }
+

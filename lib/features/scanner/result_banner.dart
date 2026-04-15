@@ -124,3 +124,4 @@ class _Thumbnail extends StatelessWidget {
     );
   }
 }
+

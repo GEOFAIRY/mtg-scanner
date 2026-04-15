@@ -157,3 +157,4 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 }
+

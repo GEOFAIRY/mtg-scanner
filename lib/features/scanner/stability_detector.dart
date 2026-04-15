@@ -80,3 +80,4 @@ class StabilityTracker {
 
   CardQuad? get latest => _history.isEmpty ? null : _history.last;
 }
+

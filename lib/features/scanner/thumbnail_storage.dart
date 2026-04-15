@@ -18,3 +18,4 @@ class ThumbnailStorage {
     if (await f.exists()) await f.delete();
   }
 }
+

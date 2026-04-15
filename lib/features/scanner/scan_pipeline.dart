@@ -113,3 +113,4 @@ class ScanPipeline {
     return usd ?? usdFoil;
   }
 }
+

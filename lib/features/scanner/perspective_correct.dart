@@ -45,3 +45,4 @@ Uint8List warpToUpright(
   final (_, png) = cv.imencode('.png', out);
   return png;
 }
+

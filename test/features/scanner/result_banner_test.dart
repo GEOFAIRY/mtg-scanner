@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_models.dart';
-import 'package:mtg_scanner/features/scanner/result_banner.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_models.dart';
+import 'package:mtg_card_scanner/features/scanner/result_banner.dart';
 
 ScryfallCard _card({String? rarity = 'uncommon'}) => ScryfallCard(
       id: 'sid-1',
       name: 'Lightning Bolt',
       set: '2xm',
+      setName: 'Double Masters',
       collectorNumber: '137',
       rarity: rarity,
       prices: ScryfallPrices(usd: 1.80),
     );
 
 void main() {
-  Widget _host(ResultBanner b) => MaterialApp(home: Scaffold(body: b));
+  Widget host(ResultBanner b) => MaterialApp(home: Scaffold(body: b));
 
   testWidgets('renders name, subtitle, and price', (tester) async {
-    await tester.pumpWidget(_host(ResultBanner(
+    await tester.pumpWidget(host(ResultBanner(
       data: BannerData(
           collectionId: 1,
           card: _card(),
@@ -34,7 +35,7 @@ void main() {
   });
 
   testWidgets('omits rarity segment when null', (tester) async {
-    await tester.pumpWidget(_host(ResultBanner(
+    await tester.pumpWidget(host(ResultBanner(
       data: BannerData(
           collectionId: 1,
           card: _card(rarity: null),
@@ -49,13 +50,13 @@ void main() {
 
   testWidgets('shows SizedBox.shrink when data is null', (tester) async {
     await tester.pumpWidget(
-        _host(ResultBanner(data: null, onDismiss: () {}, onEdit: () {})));
+        host(ResultBanner(data: null, onDismiss: () {}, onEdit: () {})));
     expect(find.text('Lightning Bolt'), findsNothing);
   });
 
   testWidgets('edit icon triggers onEdit', (tester) async {
     var edits = 0;
-    await tester.pumpWidget(_host(ResultBanner(
+    await tester.pumpWidget(host(ResultBanner(
       data: BannerData(
           collectionId: 1,
           card: _card(),
@@ -71,7 +72,7 @@ void main() {
 
   testWidgets('close icon triggers onDismiss', (tester) async {
     var dismisses = 0;
-    await tester.pumpWidget(_host(ResultBanner(
+    await tester.pumpWidget(host(ResultBanner(
       data: BannerData(
           collectionId: 1,
           card: _card(),
@@ -85,3 +86,4 @@ void main() {
     expect(dismisses, 1);
   });
 }
+

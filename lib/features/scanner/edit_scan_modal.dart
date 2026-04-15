@@ -271,3 +271,4 @@ class _EditScanModalState extends State<EditScanModal> {
     );
   }
 }
+

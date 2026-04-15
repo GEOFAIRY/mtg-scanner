@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mtg_scanner/features/scanner/scanner_state.dart';
+import 'package:mtg_card_scanner/features/scanner/scanner_state.dart';
 
 class _Overlay extends StatelessWidget {
   const _Overlay({required this.state});
@@ -71,3 +71,4 @@ void main() {
     expect(n.value.phase, ScannerPhase.offline);
   });
 }
+

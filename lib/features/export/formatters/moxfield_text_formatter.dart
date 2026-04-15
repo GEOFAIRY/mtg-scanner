@@ -23,3 +23,4 @@ List<String> formatMoxfieldText(List<MoxRow> rows) {
           '${r.count} ${r.name} (${r.set.toUpperCase()}) ${r.collector}${r.foil ? ' *F*' : ''}')
       .toList();
 }
+

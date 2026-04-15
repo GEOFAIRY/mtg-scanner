@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_client.dart';
-import 'package:mtg_scanner/data/scryfall/scryfall_models.dart';
-import 'package:mtg_scanner/features/scanner/parsed_ocr.dart';
-import 'package:mtg_scanner/features/scanner/scan_matcher.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_client.dart';
+import 'package:mtg_card_scanner/data/scryfall/scryfall_models.dart';
+import 'package:mtg_card_scanner/features/scanner/parsed_ocr.dart';
+import 'package:mtg_card_scanner/features/scanner/scan_matcher.dart';
 
 class _FakeScry extends Mock implements ScryfallClient {}
 
@@ -11,6 +11,7 @@ ScryfallCard _card() => ScryfallCard(
       id: 'sid-1',
       name: 'Lightning Bolt',
       set: '2xm',
+      setName: 'Double Masters',
       collectorNumber: '137',
       rarity: 'uncommon',
       prices: ScryfallPrices(usd: 1.80),
@@ -87,3 +88,4 @@ void main() {
     );
   });
 }
+
