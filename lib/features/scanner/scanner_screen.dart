@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
+import '../../app_settings.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/scans_repository.dart';
 import 'perspective_correct.dart';
@@ -14,20 +17,40 @@ import 'permission_gate.dart';
 final appRouteObserver = RouteObserver<ModalRoute<void>>();
 
 class ScannerScreen extends StatelessWidget {
-  const ScannerScreen({required this.scans, required this.pipeline, super.key});
+  const ScannerScreen({
+    required this.scans,
+    required this.pipeline,
+    required this.settings,
+    required this.valuePlayer,
+    super.key,
+  });
   final ScansRepository scans;
   final ScanPipeline pipeline;
+  final AppSettings settings;
+  final AudioPlayer valuePlayer;
 
   @override
   Widget build(BuildContext context) => CameraPermissionGate(
-        child: (ctx) => _ScannerBody(scans: scans, pipeline: pipeline),
+        child: (ctx) => _ScannerBody(
+          scans: scans,
+          pipeline: pipeline,
+          settings: settings,
+          valuePlayer: valuePlayer,
+        ),
       );
 }
 
 class _ScannerBody extends StatefulWidget {
-  const _ScannerBody({required this.scans, required this.pipeline});
+  const _ScannerBody({
+    required this.scans,
+    required this.pipeline,
+    required this.settings,
+    required this.valuePlayer,
+  });
   final ScansRepository scans;
   final ScanPipeline pipeline;
+  final AppSettings settings;
+  final AudioPlayer valuePlayer;
   @override
   State<_ScannerBody> createState() => _ScannerBodyState();
 }
@@ -173,24 +196,56 @@ class _ScannerBodyState extends State<_ScannerBody>
       if (_externallyPaused || _state.value.paused) return;
       _state.toCapturing();
       final upright = warpToUpright(bytes, quad: rect.quad);
-      _state.toProcessing();
+      _state.toMatching();
       final res = await widget.pipeline
           .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
-      if (_externallyPaused || _state.value.paused) {
-        await widget.scans.reject(res.id);
-        return;
-      }
       _lastCaptureAt = DateTime.now();
 
-      if (_lastLabel != null && _lastLabel == res.label) return;
-      _lastLabel = res.label;
-      _state.toDone(res.label, _state.value.inQueue + 1);
+      if (_externallyPaused || _state.value.paused) {
+        _state.toSearching();
+        _tracker.reset();
+        return;
+      }
+
+      switch (res.outcome) {
+        case CaptureOutcome.matched:
+          final name = res.matchedName ?? 'scan';
+          if (_lastLabel != null && _lastLabel == name) {
+            _state.toSearching();
+            _tracker.reset();
+            return;
+          }
+          _lastLabel = name;
+          _state.toDone(
+            name,
+            price: res.price,
+            newInQueue: _state.value.inQueue + 1,
+          );
+          if (res.price != null &&
+              res.price! > widget.settings.valueAlertThreshold) {
+            unawaited(_playValueAlert());
+          }
+          break;
+        case CaptureOutcome.noMatch:
+          _state.toNoMatch();
+          break;
+        case CaptureOutcome.offline:
+          _state.toOffline();
+          break;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 700));
       _state.toSearching();
       _tracker.reset();
     } finally {
       _busy = false;
     }
+  }
+
+  Future<void> _playValueAlert() async {
+    try {
+      await widget.valuePlayer.stop();
+      await widget.valuePlayer.resume();
+    } catch (_) {}
   }
 
   Uint8List? _bgrJpegFromFrame(CameraImage img) {
@@ -360,24 +415,33 @@ class _Overlay extends StatelessWidget {
   final ScannerState state;
   @override
   Widget build(BuildContext context) {
-    if (state.phase == ScannerPhase.done && state.lastCardLabel != null) {
-      return Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 72),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text('\u2713 ${state.lastCardLabel}',
-                style: const TextStyle(color: Colors.white)),
-          ),
+    final (text, color) = switch (state.phase) {
+      ScannerPhase.matching => ('\u22EF matching…', Colors.white70),
+      ScannerPhase.done when state.lastCardLabel != null => (
+          state.lastCardPrice != null
+              ? '\u2713 ${state.lastCardLabel} — \$${state.lastCardPrice!.toStringAsFixed(2)}'
+              : '\u2713 ${state.lastCardLabel}',
+          Colors.white,
         ),
-      );
-    }
-    return const SizedBox.shrink();
+      ScannerPhase.noMatch => ('\u2717 no match', Colors.redAccent),
+      ScannerPhase.offline => ('\u26A0 offline', Colors.orangeAccent),
+      _ => (null, Colors.white),
+    };
+    if (text == null) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 72),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(text, style: TextStyle(color: color)),
+        ),
+      ),
+    );
   }
 }
 
