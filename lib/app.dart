@@ -5,31 +5,26 @@ import 'package:http/http.dart' as http;
 
 import 'app_settings.dart';
 import 'data/db/database.dart';
-import 'data/scryfall/scryfall_client.dart';
 import 'data/repositories/collection_repository.dart';
-import 'data/repositories/scans_repository.dart';
-import 'features/shell/app_shell.dart';
+import 'data/scryfall/scryfall_client.dart';
+import 'features/collection/collection_detail_screen.dart';
+import 'features/collection/collection_screen.dart';
+import 'features/collection/manual_add_screen.dart';
+import 'features/export/export_screen.dart';
 import 'features/scanner/ocr_runner.dart';
 import 'features/scanner/scan_matcher.dart';
 import 'features/scanner/scan_pipeline.dart';
-import 'features/scanner/scan_writer.dart';
-import 'features/scanner/scanner_screen.dart'
-    show ScannerScreen, appRouteObserver;
+import 'features/scanner/scanner_screen.dart';
 import 'features/scanner/thumbnail_storage.dart';
-import 'features/review_queue/review_queue_screen.dart';
-import 'features/collection/collection_screen.dart';
-import 'features/collection/manual_add_screen.dart';
-import 'features/collection/collection_detail_screen.dart';
-import 'features/export/export_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/shell/app_shell.dart';
 
 class Deps {
-  Deps._(this.db, this.scry, this.collection, this.scans, this.pipeline,
-      this.settings, this.valuePlayer);
+  Deps._(this.db, this.scry, this.collection, this.pipeline, this.settings,
+      this.valuePlayer);
   final AppDatabase db;
   final ScryfallClient scry;
   final CollectionRepository collection;
-  final ScansRepository scans;
   final ScanPipeline pipeline;
   final AppSettings settings;
   final AudioPlayer valuePlayer;
@@ -38,10 +33,8 @@ class Deps {
     final db = AppDatabase();
     final scry = ScryfallClient(http.Client());
     final collection = CollectionRepository(db, scry);
-    final scans = ScansRepository(db);
     final pipeline = ScanPipeline(
       ocr: MlKitOcrRunner(),
-      writer: ScanWriter(db),
       storage: ThumbnailStorage(),
       matcher: ScanMatcher(scry: scry),
       collection: collection,
@@ -50,7 +43,7 @@ class Deps {
     final valuePlayer = AudioPlayer();
     await valuePlayer.setSource(AssetSource('sounds/cash_register.mp3'));
     await valuePlayer.setReleaseMode(ReleaseMode.stop);
-    return Deps._(db, scry, collection, scans, pipeline, settings, valuePlayer);
+    return Deps._(db, scry, collection, pipeline, settings, valuePlayer);
   }
 }
 
@@ -85,37 +78,42 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
                 AppShell(location: state.matchedLocation, child: child),
             routes: [
               GoRoute(
-                  path: '/scan',
-                  builder: (_, __) => ScannerScreen(
-                      scans: deps.scans,
-                      pipeline: deps.pipeline,
-                      settings: deps.settings,
-                      valuePlayer: deps.valuePlayer)),
+                path: '/scan',
+                builder: (_, __) => ScannerScreen(
+                  pipeline: deps.pipeline,
+                  settings: deps.settings,
+                  valuePlayer: deps.valuePlayer,
+                  collection: deps.collection,
+                  scry: deps.scry,
+                ),
+              ),
               GoRoute(
-                  path: '/queue',
-                  builder: (_, __) => ReviewQueueScreen(
-                      scans: deps.scans,
-                      collection: deps.collection,
-                      scry: deps.scry)),
-              GoRoute(path: '/collection', routes: [
-                GoRoute(
+                path: '/collection',
+                routes: [
+                  GoRoute(
                     path: 'add',
                     builder: (_, __) => ManualAddScreen(
-                        scry: deps.scry, collection: deps.collection)),
-                GoRoute(
+                        scry: deps.scry, collection: deps.collection),
+                  ),
+                  GoRoute(
                     path: ':id',
                     builder: (ctx, st) => CollectionDetailScreen(
-                        id: int.parse(st.pathParameters['id']!),
-                        repo: deps.collection)),
-              ], builder: (_, __) => CollectionScreen(repo: deps.collection)),
+                      id: int.parse(st.pathParameters['id']!),
+                      repo: deps.collection,
+                    ),
+                  ),
+                ],
+                builder: (_, __) => CollectionScreen(repo: deps.collection),
+              ),
               GoRoute(
-                  path: '/export',
-                  builder: (_, __) =>
-                      ExportScreen(repo: deps.collection)),
+                path: '/export',
+                builder: (_, __) => ExportScreen(repo: deps.collection),
+              ),
               GoRoute(
-                  path: '/settings',
-                  builder: (_, __) => SettingsScreen(
-                      repo: deps.collection, settings: deps.settings)),
+                path: '/settings',
+                builder: (_, __) => SettingsScreen(
+                    repo: deps.collection, settings: deps.settings),
+              ),
             ],
           ),
         ],
