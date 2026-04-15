@@ -70,7 +70,7 @@ class _ScannerBodyState extends State<_ScannerBody>
   final _banner = ValueNotifier<BannerData?>(null);
   bool _busy = false;
   DateTime? _lastCaptureAt;
-  String? _lastLabel;
+  bool _sawEmpty = true;
   bool _streamActive = false;
   bool _externallyPaused = false;
   bool _initializing = false;
@@ -190,17 +190,20 @@ class _ScannerBodyState extends State<_ScannerBody>
       if (rect == null) {
         _tracker.reset();
         _state.toSearching();
+        _sawEmpty = true;
         return;
       }
       _tracker.push(rect.quad);
       _state.toTracking();
       if (!_tracker.isStable) return;
+      if (!_sawEmpty) return;
 
       final sinceLast = DateTime.now().difference(
           _lastCaptureAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (sinceLast.inMilliseconds < 500) return;
 
       if (_externallyPaused || _state.value.paused) return;
+      _sawEmpty = false;
       _state.toCapturing();
       final upright = warpToUpright(bytes, quad: rect.quad);
       _state.toMatching();
@@ -216,13 +219,6 @@ class _ScannerBodyState extends State<_ScannerBody>
 
       switch (res.outcome) {
         case CaptureOutcome.matched:
-          final name = res.card!.name;
-          if (_lastLabel != null && _lastLabel == name) {
-            _state.toSearching();
-            _tracker.reset();
-            return;
-          }
-          _lastLabel = name;
           _banner.value = BannerData(
             collectionId: res.collectionId!,
             card: res.card!,
@@ -263,7 +259,6 @@ class _ScannerBodyState extends State<_ScannerBody>
     final d = _banner.value;
     if (d == null) return;
     _banner.value = null;
-    _lastLabel = null;
     await widget.collection
         .undoAdd(id: d.collectionId, wasInsertion: d.wasInsertion);
     if (!mounted) return;
@@ -324,7 +319,6 @@ class _ScannerBodyState extends State<_ScannerBody>
         foil: result.foil,
         wasInsertion: d.wasInsertion,
       );
-      _lastLabel = result.card.name;
     }
     await _resumeStreamIfNotPaused();
   }
