@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
+import '../../app.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/scans_repository.dart';
 import 'perspective_correct.dart';
@@ -30,7 +31,8 @@ class _ScannerBody extends StatefulWidget {
   State<_ScannerBody> createState() => _ScannerBodyState();
 }
 
-class _ScannerBodyState extends State<_ScannerBody> {
+class _ScannerBodyState extends State<_ScannerBody>
+    with RouteAware, WidgetsBindingObserver {
   CameraController? _controller;
   final _state = ScannerStateNotifier();
   final _tracker = StabilityTracker();
@@ -38,11 +40,61 @@ class _ScannerBodyState extends State<_ScannerBody> {
   bool _busy = false;
   DateTime? _lastCaptureAt;
   String? _lastLabel;
+  bool _streamActive = false;
+  ModalRoute<void>? _route;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _init();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final r = ModalRoute.of(context);
+    if (r != _route) {
+      if (_route != null) appRouteObserver.unsubscribe(this);
+      _route = r;
+      if (r != null) appRouteObserver.subscribe(this, r);
+    }
+  }
+
+  @override
+  void didPushNext() => _pauseStream();
+
+  @override
+  void didPopNext() => _resumeStreamIfNotPaused();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _resumeStreamIfNotPaused();
+    } else {
+      _pauseStream();
+    }
+  }
+
+  Future<void> _pauseStream() async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized || !_streamActive) return;
+    _streamActive = false;
+    try {
+      await c.stopImageStream();
+    } catch (_) {}
+  }
+
+  Future<void> _resumeStreamIfNotPaused() async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    if (_state.value.paused || _streamActive) return;
+    _streamActive = true;
+    try {
+      await c.startImageStream(_onFrame);
+    } catch (_) {
+      _streamActive = false;
+    }
   }
 
   Future<void> _init() async {
@@ -55,6 +107,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
     await c.initialize();
     if (!mounted) return;
     setState(() => _controller = c);
+    _streamActive = true;
     await c.startImageStream(_onFrame);
   }
 
@@ -139,6 +192,8 @@ class _ScannerBodyState extends State<_ScannerBody> {
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     _state.dispose();
     _forceFoil.dispose();
@@ -211,9 +266,9 @@ class _ScannerBodyState extends State<_ScannerBody> {
                     onTap: () async {
                       _state.togglePause();
                       if (_state.value.paused) {
-                        await c.stopImageStream();
+                        await _pauseStream();
                       } else {
-                        await c.startImageStream(_onFrame);
+                        await _resumeStreamIfNotPaused();
                       }
                     },
                   ),

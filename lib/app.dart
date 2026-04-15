@@ -48,6 +48,12 @@ class Deps {
   }
 }
 
+/// Shared across the app so screens can react to route pushes/pops
+/// (e.g., the scanner screen pausing its camera stream when the review
+/// queue is pushed on top of it).
+final RouteObserver<ModalRoute<void>> appRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class MtgScannerApp extends StatefulWidget {
   const MtgScannerApp({super.key});
   @override
@@ -58,6 +64,7 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
   late final Deps deps = Deps.create();
   late final GoRouter _router = GoRouter(
     initialLocation: '/collection',
+    observers: [appRouteObserver],
     routes: [
       ShellRoute(
         builder: (ctx, state, child) =>

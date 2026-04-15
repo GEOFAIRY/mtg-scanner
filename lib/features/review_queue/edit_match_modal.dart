@@ -1,15 +1,14 @@
-import 'package:drift/drift.dart' as d;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../data/db/database.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
-import 'pick_different_card_modal.dart';
+import '../../shared/widgets/printing_picker.dart';
 
-/// In-place editor for a single scan row. Lets the user correct the name,
-/// set code, or collector number without re-matching from scratch. Saving
-/// re-runs a Scryfall lookup against the edited values; on success the
-/// matched_* fields are rewritten, on failure the edited values are saved
-/// as-is at 90% confidence (manual override).
+/// Edit a scan by seeding Scryfall's autocomplete with the detected name.
+/// The user can refine the name, pick a suggestion, then pick the exact
+/// printing (set + collector number). Saving writes match columns with
+/// confidence 1.0 since the user explicitly picked it.
 class EditMatchModal extends StatefulWidget {
   const EditMatchModal({
     required this.scan,
@@ -25,110 +24,74 @@ class EditMatchModal extends StatefulWidget {
 }
 
 class _EditMatchModalState extends State<EditMatchModal> {
-  late final TextEditingController _name;
-  late final TextEditingController _set;
-  late final TextEditingController _coll;
-  bool _saving = false;
-  String? _error;
+  late final TextEditingController _ctrl;
+  Timer? _debounce;
+  List<String> _suggestions = const [];
+  String? _pickedName;
+  bool _loadingSuggestions = false;
 
   @override
   void initState() {
     super.initState();
-    final s = widget.scan;
-    _name = TextEditingController(text: s.matchedName ?? s.rawName);
-    _set = TextEditingController(text: s.matchedSet ?? '');
-    _coll = TextEditingController(text: s.matchedCollectorNumber ?? '');
+    final seed = (widget.scan.matchedName ?? widget.scan.rawName).trim();
+    _ctrl = TextEditingController(text: seed);
+    if (seed.length >= 2) {
+      _pickedName = seed;
+      _fetchSuggestions(seed);
+    }
   }
 
   @override
   void dispose() {
-    _name.dispose();
-    _set.dispose();
-    _coll.dispose();
+    _debounce?.cancel();
+    _ctrl.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final name = _name.text.trim();
-    final set = _set.text.trim().toUpperCase();
-    final coll = _coll.text.trim().toLowerCase();
-    if (name.isEmpty && (set.isEmpty || coll.isEmpty)) {
-      setState(() => _error = 'Fill a name or both set + collector number.');
+  void _onChanged(String q) {
+    _debounce?.cancel();
+    setState(() => _pickedName = null);
+    if (q.trim().length < 2) {
+      setState(() => _suggestions = const []);
       return;
     }
-    setState(() {
-      _saving = true;
-      _error = null;
+    _debounce = Timer(const Duration(milliseconds: 220), () {
+      _fetchSuggestions(q.trim());
     });
-
-    ScryfallCard? card;
-    var confidence = 0.9;
-
-    if (set.isNotEmpty && coll.isNotEmpty) {
-      try {
-        card = await widget.scry.cardBySetAndNumber(set, coll);
-        confidence = 1.0;
-      } on ScryfallNotFound {
-        // fall through
-      } on ScryfallException {
-        // fall through
-      }
-    }
-    if (card == null && name.isNotEmpty) {
-      try {
-        card = await widget.scry.cardByFuzzyName(name);
-        confidence = 0.6;
-      } on ScryfallNotFound {
-        // fall through
-      } on ScryfallException {
-        // fall through
-      }
-    }
-
-    if (!mounted) return;
-
-    if (card != null) {
-      await widget.db.scansDao.updateMatch(
-        widget.scan.id,
-        scryfallId: card.id,
-        name: card.name,
-        setCode: card.set,
-        collectorNumber: card.collectorNumber,
-        confidence: confidence,
-        priceUsd: card.prices.usd,
-        priceUsdFoil: card.prices.usdFoil,
-      );
-    } else {
-      // No Scryfall hit — save edited values verbatim as a manual override.
-      await (widget.db.update(widget.db.scans)
-            ..where((t) => t.id.equals(widget.scan.id)))
-          .write(ScansCompanion(
-        matchedName: d.Value(name.isEmpty ? null : name),
-        matchedSet: d.Value(set.isEmpty ? null : set),
-        matchedCollectorNumber: d.Value(coll.isEmpty ? null : coll),
-        confidence: const d.Value(0.9),
-      ));
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
   }
 
-  Future<void> _pickDifferent() async {
-    final picked = await Navigator.of(context).push<ScryfallCard>(
-      MaterialPageRoute(
-          builder: (_) => PickDifferentCardModal(scry: widget.scry)),
-    );
-    if (picked == null || !mounted) return;
+  Future<void> _fetchSuggestions(String q) async {
+    setState(() => _loadingSuggestions = true);
+    try {
+      final list = await widget.scry.autocomplete(q);
+      if (!mounted) return;
+      setState(() => _suggestions = list);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _suggestions = const []);
+    } finally {
+      if (mounted) setState(() => _loadingSuggestions = false);
+    }
+  }
+
+  void _pickName(String name) {
+    _ctrl.text = name;
+    setState(() {
+      _pickedName = name;
+      _suggestions = const [];
+    });
+  }
+
+  Future<void> _onPrintingPicked(ScryfallCard c) async {
     await widget.db.scansDao.updateMatch(
       widget.scan.id,
-      scryfallId: picked.id,
-      name: picked.name,
-      setCode: picked.set,
-      collectorNumber: picked.collectorNumber,
+      scryfallId: c.id,
+      name: c.name,
+      setCode: c.set,
+      collectorNumber: c.collectorNumber,
       confidence: 1.0,
-      priceUsd: picked.prices.usd,
-      priceUsdFoil: picked.prices.usdFoil,
+      priceUsd: c.prices.usd,
+      priceUsdFoil: c.prices.usdFoil,
     );
     if (!mounted) return;
     Navigator.of(context).pop(true);
@@ -139,66 +102,93 @@ class _EditMatchModalState extends State<EditMatchModal> {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit scan')),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _ctrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Card name',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _loadingSuggestions
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : (_ctrl.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                _ctrl.clear();
+                                _onChanged('');
+                              },
+                            )),
+                ),
+                onChanged: _onChanged,
+              ),
+            ),
+            if (_suggestions.isNotEmpty && _pickedName == null)
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _suggestions.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) => ListTile(
+                    title: Text(_suggestions[i]),
+                    onTap: () => _pickName(_suggestions[i]),
+                  ),
+                ),
+              )
+            else if (_pickedName != null)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.style, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Printings of "$_pickedName"',
+                              style:
+                                  Theme.of(context).textTheme.labelMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: PrintingPicker(
+                        key: ValueKey(_pickedName),
+                        name: _pickedName!,
+                        scry: widget.scry,
+                        onPick: _onPrintingPicked,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              const Expanded(
+                child: Center(
+                  child: Text('Type at least 2 letters',
+                      style: TextStyle(color: Colors.grey)),
                 ),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _set,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Set code',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _coll,
-                      decoration: const InputDecoration(
-                        labelText: 'Collector #',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.save),
-                label: const Text('Save'),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _saving ? null : _pickDifferent,
-                icon: const Icon(Icons.search),
-                label: const Text('Pick a different card instead'),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );
