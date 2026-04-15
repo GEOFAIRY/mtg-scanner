@@ -1,10 +1,10 @@
-# MTG Scanner — Plans A + B1 + B2 complete (2026-04-15)
+# MTG Scanner — Plans A + B1 + B2 + B3 complete (2026-04-15)
 
 ## Status
 - **Plan A:** done (manual add, collection, Moxfield export, settings, backup, APK).
 - **Plan B1:** done — camera capture, opencv rectangle + stability, landscape-aware warp, ML-Kit OCR populates `rawName`/`rawSetCollector` and a thumbnail.
 - **Plan B2:** done — `ScanMatcher` runs Scryfall lookup after each capture. `/cards/{set}/{number}` hit → confidence 1.0, auto-confirm to collection. Fuzzy-name fallback → 0.6, stays in review queue. Failure → 0.0, raw OCR shown so user can Edit.
-- **Plan B3 (foil detection):** not started. `foilGuess = -1` on all B2 rows; manual foil switch in the review queue is the current escape hatch.
+- **Plan B3:** done — lightweight HSV-saturation foil heuristic writes `foilGuess` on each scan. Accuracy is weak (single-frame signal, as the spec warned); the manual foil switch in the review queue remains the authoritative control.
 
 ## What works end-to-end today
 - Point camera → card auto-detects → pipeline runs Scryfall match → either auto-confirms to collection (with live USD price) or lands in the review queue at 60% for user confirmation.
@@ -20,8 +20,7 @@
 - Confidence-tier 0.3 ("low-quality OCR") from spec collapsed to 0.0 — simpler, same UX.
 
 ## Next
-- **Plan B3:** foil heuristics (specular highlights + stamp detection). Spec §Foil heuristics.
-- **Polish backlog:** tighter OCR name region, retry-on-reconnect for failed lookups, release APK split, icon/branding.
+- **Polish backlog:** tighter OCR name region, retry-on-reconnect for failed lookups, release APK split, icon/branding, stamp-based foil detection (needs reference templates), multi-frame tilt analysis for better foil signal.
 
 ## Environment reminders
 - Invoke Flutter via `cmd.exe /c "powershell -File tool\flutter.ps1 <args>"` from WSL. The wrapper clears the `build\native_assets\windows\sqlite3.dll` lock that otherwise blocks rebuilds.

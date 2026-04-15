@@ -9,9 +9,9 @@ class FoilSignal {
 
 FoilSignal detectFoil(
   Uint8List uprightPng, {
-  double triggerRatio = 0.08,
-  int saturationThreshold = 200,
-  int valueThreshold = 200,
+  double triggerRatio = 0.04,
+  int saturationThreshold = 160,
+  int valueThreshold = 180,
   bool strict = false,
 }) {
   final src = cv.imdecode(uprightPng, cv.IMREAD_COLOR);
