@@ -70,7 +70,15 @@ class _ScannerBodyState extends State<_ScannerBody>
   final _banner = ValueNotifier<BannerData?>(null);
   bool _busy = false;
   DateTime? _lastCaptureAt;
-  bool _sawEmpty = true;
+  // Re-arm only after a run of truly empty frames — a single rect-null flicker
+  // (shadow, hand moving across the card) used to re-trigger capture and
+  // produce duplicate scans of the same card.
+  static const _emptyFramesToReArm = 6;
+  int _emptyStreak = _emptyFramesToReArm;
+  // Suppress re-capturing the same Scryfall card back-to-back.
+  String? _lastMatchedCardId;
+  DateTime? _lastMatchedAt;
+  static const _duplicateWindow = Duration(seconds: 3);
   bool _streamActive = false;
   bool _externallyPaused = false;
   bool _initializing = false;
@@ -190,20 +198,20 @@ class _ScannerBodyState extends State<_ScannerBody>
       if (rect == null) {
         _tracker.reset();
         _state.toSearching();
-        _sawEmpty = true;
+        if (_emptyStreak < _emptyFramesToReArm) _emptyStreak++;
         return;
       }
       _tracker.push(rect.quad);
       _state.toTracking();
       if (!_tracker.isStable) return;
-      if (!_sawEmpty) return;
+      if (_emptyStreak < _emptyFramesToReArm) return;
 
       final sinceLast = DateTime.now().difference(
           _lastCaptureAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (sinceLast.inMilliseconds < 500) return;
 
       if (_externallyPaused || _state.value.paused) return;
-      _sawEmpty = false;
+      _emptyStreak = 0;
       _state.toCapturing();
       final upright = warpToUpright(bytes, quad: rect.quad);
       _state.toMatching();
@@ -219,6 +227,23 @@ class _ScannerBodyState extends State<_ScannerBody>
 
       switch (res.outcome) {
         case CaptureOutcome.matched:
+          final now = DateTime.now();
+          final isDuplicate = res.card!.id == _lastMatchedCardId &&
+              _lastMatchedAt != null &&
+              now.difference(_lastMatchedAt!) < _duplicateWindow;
+          if (isDuplicate) {
+            // Same card matched again within the cooldown — the user almost
+            // certainly hasn't swapped cards; undo the insertion the pipeline
+            // just performed and keep the existing banner.
+            await widget.collection.undoAdd(
+                id: res.collectionId!, wasInsertion: res.wasInsertion);
+            _lastMatchedAt = now;
+            _state.toSearching();
+            _tracker.reset();
+            return;
+          }
+          _lastMatchedCardId = res.card!.id;
+          _lastMatchedAt = now;
           _banner.value = BannerData(
             collectionId: res.collectionId!,
             card: res.card!,
@@ -390,7 +415,7 @@ class _ScannerBodyState extends State<_ScannerBody>
             builder: (_, s, __) => _Overlay(state: s),
           ),
           Positioned(
-            bottom: 100,
+            bottom: 196,
             left: 0,
             right: 0,
             child: Center(
@@ -426,7 +451,7 @@ class _ScannerBodyState extends State<_ScannerBody>
             ),
           ),
           Positioned(
-            bottom: 24,
+            bottom: 120,
             left: 0,
             right: 0,
             child: Row(
@@ -502,7 +527,7 @@ class _Overlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (text, color) = switch (state.phase) {
-      ScannerPhase.matching => ('\u22EF matching…', Colors.white70),
+      ScannerPhase.matching => ('Matching', Colors.white70),
       ScannerPhase.noMatch => ('\u2717 no match', Colors.redAccent),
       ScannerPhase.offline => ('\u26A0 offline', Colors.orangeAccent),
       _ => (null, Colors.white),

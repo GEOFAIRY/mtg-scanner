@@ -7,12 +7,12 @@ import 'package:mtg_card_scanner/features/scanner/scan_matcher.dart';
 
 class _FakeScry extends Mock implements ScryfallClient {}
 
-ScryfallCard _card() => ScryfallCard(
-      id: 'sid-1',
+ScryfallCard _card({String set = '2xm', String cn = '137'}) => ScryfallCard(
+      id: 'sid-$set-$cn',
       name: 'Lightning Bolt',
-      set: '2xm',
+      set: set,
       setName: 'Double Masters',
-      collectorNumber: '137',
+      collectorNumber: cn,
       rarity: 'uncommon',
       prices: ScryfallPrices(usd: 1.80),
     );
@@ -26,16 +26,29 @@ void main() {
     matcher = ScanMatcher(scry: scry);
   });
 
-  test('exact set+collector match returns the card', () async {
+  test('name+cn lookup wins even when set code is present', () async {
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
+        .thenAnswer((_) async => [_card()]);
+    final r = await matcher.match(
+        ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
+    expect(r, isNotNull);
+    expect(r!.set, '2xm');
+    verifyNever(() => scry.cardBySetAndNumber(any(), any()));
+  });
+
+  test('falls back to set+cn when name+cn returns empty', () async {
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
+        .thenAnswer((_) async => <ScryfallCard>[]);
     when(() => scry.cardBySetAndNumber('2XM', '137'))
         .thenAnswer((_) async => _card());
     final r = await matcher.match(
         ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
     expect(r, isNotNull);
-    expect(r!.name, 'Lightning Bolt');
   });
 
-  test('fuzzy fallback when exact 404s', () async {
+  test('falls back to fuzzy when name+cn and set+cn both fail', () async {
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '999'))
+        .thenAnswer((_) async => <ScryfallCard>[]);
     when(() => scry.cardBySetAndNumber('2XM', '999'))
         .thenThrow(ScryfallNotFound('2xm/999'));
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
@@ -66,10 +79,11 @@ void main() {
         .match(ParsedOcr.from(rawName: '', rawSetCollector: ''));
     expect(r, isNull);
     verifyNever(() => scry.cardByFuzzyName(any()));
+    verifyNever(() => scry.cardsByNameAndCollectorNumber(any(), any()));
   });
 
-  test('rethrows ScryfallException from exact lookup', () async {
-    when(() => scry.cardBySetAndNumber('2XM', '137'))
+  test('rethrows ScryfallException from name+cn lookup', () async {
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
         .thenThrow(ScryfallException('network down'));
     expect(
       () => matcher.match(ParsedOcr.from(
@@ -88,4 +102,3 @@ void main() {
     );
   });
 }
-

@@ -85,6 +85,31 @@ class ScryfallClient {
     });
   }
 
+  /// Search for a card by exact name and collector number across all sets.
+  ///
+  /// Card names OCR much more reliably than the tiny set-code glyph; pairing a
+  /// confident name with the collector number almost always resolves to a
+  /// single printing (or a small set of reprints where the latest is the best
+  /// default guess, hence `order=released`).
+  Future<List<ScryfallCard>> cardsByNameAndCollectorNumber(
+      String name, String collectorNumber) {
+    return _throttled(() async {
+      final q = Uri.encodeQueryComponent(
+          '!"$name" cn:$collectorNumber');
+      final uri = Uri.parse('$_base/cards/search?q=$q&order=released');
+      final r = await _http.get(uri, headers: _headers);
+      if (r.statusCode == 404) return <ScryfallCard>[];
+      if (r.statusCode >= 400) {
+        throw ScryfallException(r.body, statusCode: r.statusCode);
+      }
+      final data = (jsonDecode(r.body) as Map<String, dynamic>)['data'] as List?;
+      if (data == null) return <ScryfallCard>[];
+      return data
+          .map((j) => ScryfallCard.fromJson(j as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
   Future<List<ScryfallCard>> printingsOfName(String name) async {
     final q = Uri.encodeQueryComponent('!"$name" unique:prints');
     var uri = Uri.parse('$_base/cards/search?q=$q&order=released');

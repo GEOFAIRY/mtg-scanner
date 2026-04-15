@@ -137,7 +137,17 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
     }
     return MaterialApp.router(
       title: 'MTG Scanner',
-      theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
+      theme: ThemeData(
+        colorSchemeSeed: Colors.deepPurple,
+        brightness: Brightness.light,
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: Colors.deepPurple,
+        brightness: Brightness.dark,
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }

@@ -8,24 +8,35 @@ class ScanMatcher {
 
   /// Resolves parsed OCR to a Scryfall card.
   ///
-  /// Returns `null` when no card is found (exact AND fuzzy 404, or empty input).
-  /// Throws [ScryfallException] on network/API errors — callers treat these
-  /// as "offline" rather than "no match".
+  /// Lookup order:
+  /// 1. name + collector number (set-code OCR is noisy, name + cn is usually unique)
+  /// 2. set code + collector number (kept as a fallback when name OCR is empty)
+  /// 3. fuzzy name
+  ///
+  /// Returns `null` when every lookup comes up empty. Throws [ScryfallException]
+  /// on network/API errors so callers can treat them as "offline".
   Future<ScryfallCard?> match(ParsedOcr parsed) async {
-    if (parsed.setCode != null && parsed.collectorNumber != null) {
+    final name = parsed.name;
+    final cn = parsed.collectorNumber;
+
+    if (name.isNotEmpty && cn != null) {
+      final hits = await scry.cardsByNameAndCollectorNumber(name, cn);
+      if (hits.isNotEmpty) return hits.first;
+    }
+
+    if (parsed.setCode != null && cn != null) {
       try {
-        return await scry.cardBySetAndNumber(
-            parsed.setCode!, parsed.collectorNumber!);
+        return await scry.cardBySetAndNumber(parsed.setCode!, cn);
       } on ScryfallNotFound {
         // fall through to fuzzy
       }
     }
-    if (parsed.name.isEmpty) return null;
+
+    if (name.isEmpty) return null;
     try {
-      return await scry.cardByFuzzyName(parsed.name);
+      return await scry.cardByFuzzyName(name);
     } on ScryfallNotFound {
       return null;
     }
   }
 }
-
