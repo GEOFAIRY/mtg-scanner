@@ -46,6 +46,18 @@ void main() {
     expect(r, isNotNull);
   });
 
+  test('iterates alternate collector-number candidates', () async {
+    // "SPM 143 C 2024": primary cn is "143", alternate is the year "2024".
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '143'))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '2024'))
+        .thenAnswer((_) async => [_card(set: 'spm', cn: '2024')]);
+    final r = await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: 'SPM 143 C 2024'));
+    expect(r, isNotNull);
+    expect(r!.collectorNumber, '2024');
+  });
+
   test('falls back to fuzzy when name+cn and set+cn both fail', () async {
     when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '999'))
         .thenAnswer((_) async => <ScryfallCard>[]);

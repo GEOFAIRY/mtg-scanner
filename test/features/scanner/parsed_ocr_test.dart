@@ -39,6 +39,27 @@ void main() {
     test('returns null on garbage', () {
       expect(ParsedOcr.parseSetCollector('zzzzzz'), isNull);
     });
+    test('prefers the "N/M" fraction number over a neighbouring year', () {
+      final r = ParsedOcr.parseSetCollector('2024 SPM 143/368 C');
+      expect(r!.collectorNumber, '143');
+    });
+    test('demotes a copyright year when no fraction is present', () {
+      final r = ParsedOcr.parseSetCollector('SPM 143 C 2024');
+      expect(r!.collectorNumber, '143');
+    });
+  });
+
+  group('collectorNumberCandidates', () {
+    test('orders years last', () {
+      final p =
+          ParsedOcr.from(rawName: 'Card', rawSetCollector: 'SPM 143 C 2024');
+      expect(p.collectorNumberCandidates, ['143', '2024']);
+    });
+    test('only exposes fraction numerators when a fraction is present', () {
+      final p = ParsedOcr.from(
+          rawName: 'Card', rawSetCollector: '2024 SPM 143/368 C');
+      expect(p.collectorNumberCandidates, ['143']);
+    });
   });
 
   test('ParsedOcr.from combines raw strings', () {
