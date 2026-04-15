@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
+import '../../data/db/database.dart';
 import '../../data/repositories/scans_repository.dart';
 import 'perspective_correct.dart';
 import 'scan_pipeline.dart';
@@ -32,6 +34,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
   CameraController? _controller;
   final _state = ScannerStateNotifier();
   final _tracker = StabilityTracker();
+  final _forceFoil = ValueNotifier<bool>(false);
   bool _busy = false;
   DateTime? _lastCaptureAt;
   String? _lastLabel;
@@ -78,7 +81,8 @@ class _ScannerBodyState extends State<_ScannerBody> {
       _state.toCapturing();
       final upright = warpToUpright(bytes, quad: rect.quad);
       _state.toProcessing();
-      final res = await widget.pipeline.captureFromWarpedCrop(upright);
+      final res = await widget.pipeline
+          .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
       _lastCaptureAt = DateTime.now();
 
       if (_lastLabel != null && _lastLabel == res.label) return;
@@ -137,6 +141,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
   void dispose() {
     _controller?.dispose();
     _state.dispose();
+    _forceFoil.dispose();
     super.dispose();
   }
 
@@ -147,6 +152,7 @@ class _ScannerBodyState extends State<_ScannerBody> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
+      drawer: _ScannerDrawer(scans: widget.scans),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -156,11 +162,27 @@ class _ScannerBodyState extends State<_ScannerBody> {
             builder: (_, s, __) => _Overlay(state: s),
           ),
           Positioned(
-            top: 16,
-            right: 16,
-            child: ValueListenableBuilder<ScannerState>(
-              valueListenable: _state,
-              builder: (_, s, __) => _QueueBadge(inQueue: s.inQueue),
+            top: 12,
+            left: 12,
+            child: Builder(
+              builder: (ctx) => _Chip(
+                icon: Icons.menu,
+                onTap: () => Scaffold.of(ctx).openDrawer(),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: StreamBuilder<List<Scan>>(
+              stream: widget.scans.watchPending(),
+              builder: (_, snap) {
+                final n = snap.data?.length ?? 0;
+                return _Chip(
+                  label: '$n in queue',
+                  onTap: () => context.push('/queue'),
+                );
+              },
             ),
           ),
           Positioned(
@@ -170,26 +192,45 @@ class _ScannerBodyState extends State<_ScannerBody> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  onPressed: () async {
-                    _state.togglePause();
-                    if (_state.value.paused) {
-                      await c.stopImageStream();
-                    } else {
-                      await c.startImageStream(_onFrame);
-                    }
-                  },
-                  icon: const Icon(Icons.pause_circle_outline,
-                      size: 48, color: Colors.white),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _forceFoil,
+                  builder: (_, on, __) => _ToggleButton(
+                    icon: Icons.auto_awesome,
+                    label: 'Foil',
+                    on: on,
+                    onTap: () => _forceFoil.value = !_forceFoil.value,
+                  ),
                 ),
-                IconButton(
-                  onPressed: () async {
-                    _state.toggleTorch();
-                    await c.setFlashMode(
-                        _state.value.torchOn ? FlashMode.torch : FlashMode.off);
-                  },
-                  icon: const Icon(Icons.flashlight_on,
-                      size: 36, color: Colors.white),
+                const SizedBox(width: 12),
+                ValueListenableBuilder<ScannerState>(
+                  valueListenable: _state,
+                  builder: (_, s, __) => _ToggleButton(
+                    icon: s.paused ? Icons.play_arrow : Icons.pause,
+                    label: s.paused ? 'Resume' : 'Pause',
+                    on: s.paused,
+                    onTap: () async {
+                      _state.togglePause();
+                      if (_state.value.paused) {
+                        await c.stopImageStream();
+                      } else {
+                        await c.startImageStream(_onFrame);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ValueListenableBuilder<ScannerState>(
+                  valueListenable: _state,
+                  builder: (_, s, __) => _ToggleButton(
+                    icon: Icons.flashlight_on,
+                    label: 'Torch',
+                    on: s.torchOn,
+                    onTap: () async {
+                      _state.toggleTorch();
+                      await c.setFlashMode(
+                          _state.value.torchOn ? FlashMode.torch : FlashMode.off);
+                    },
+                  ),
                 ),
               ],
             ),
@@ -226,17 +267,143 @@ class _Overlay extends StatelessWidget {
   }
 }
 
-class _QueueBadge extends StatelessWidget {
-  const _QueueBadge({required this.inQueue});
-  final int inQueue;
+class _Chip extends StatelessWidget {
+  const _Chip({this.icon, this.label, required this.onTap});
+  final IconData? icon;
+  final String? label;
+  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(16),
+  Widget build(BuildContext context) => Material(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: label == null ? 10 : 14, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null)
+                  Icon(icon, color: Colors.white, size: 22),
+                if (icon != null && label != null) const SizedBox(width: 6),
+                if (label != null)
+                  Text(label!,
+                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ],
+            ),
+          ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text('$inQueue in queue',
-            style: const TextStyle(color: Colors.white)),
+      );
+}
+
+class _ToggleButton extends StatelessWidget {
+  const _ToggleButton({
+    required this.icon,
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final bg = on
+        ? const Color(0xFFECC460).withValues(alpha: 0.9)
+        : Colors.black.withValues(alpha: 0.55);
+    final fg = on ? Colors.black : Colors.white;
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(26),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(26),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: fg, size: 24),
+              const SizedBox(height: 2),
+              Text(label, style: TextStyle(color: fg, fontSize: 11)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScannerDrawer extends StatelessWidget {
+  const _ScannerDrawer({required this.scans});
+  final ScansRepository scans;
+  @override
+  Widget build(BuildContext context) => Drawer(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Review queue',
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600)),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: StreamBuilder<List<Scan>>(
+                  stream: scans.watchPending(),
+                  builder: (_, snap) {
+                    final items = snap.data ?? const [];
+                    if (items.isEmpty) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('No pending scans',
+                              style: TextStyle(color: Colors.grey)),
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final s = items[i];
+                        final title = s.matchedName ??
+                            (s.rawName.trim().isEmpty
+                                ? '(unmatched)'
+                                : 'OCR: ${s.rawName}');
+                        return ListTile(
+                          dense: true,
+                          title: Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          subtitle: Text(
+                              '${(s.confidence * 100).toStringAsFixed(0)}%'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            context.push('/queue');
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.inbox),
+                title: const Text('Open full review queue'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/queue');
+                },
+              ),
+            ],
+          ),
+        ),
       );
 }

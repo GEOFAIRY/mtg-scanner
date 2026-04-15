@@ -28,6 +28,11 @@ class _CollectionScreenState extends State<CollectionScreen> {
         title: const Text('Collection'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: 'Export',
+            onPressed: () => context.push('/export'),
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => context.go('/collection/add'),
           ),

@@ -8,14 +8,14 @@ class AppShell extends StatelessWidget {
 
   static const _tabs = [
     ('Scan', Icons.camera_alt, '/scan'),
-    ('Queue', Icons.inbox, '/queue'),
     ('Collection', Icons.style, '/collection'),
-    ('Export', Icons.ios_share, '/export'),
     ('Settings', Icons.settings, '/settings'),
   ];
 
-  int get _index =>
-      _tabs.indexWhere((t) => location.startsWith(t.$3)).clamp(0, 4);
+  int get _index {
+    final i = _tabs.indexWhere((t) => location.startsWith(t.$3));
+    return i < 0 ? 1 : i; // unknown location → Collection
+  }
 
   @override
   Widget build(BuildContext context) {
