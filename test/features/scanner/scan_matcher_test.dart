@@ -1,14 +1,9 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:mtg_scanner/data/db/database.dart';
-import 'package:mtg_scanner/data/repositories/collection_repository.dart';
-import 'package:mtg_scanner/data/repositories/scans_repository.dart';
 import 'package:mtg_scanner/data/scryfall/scryfall_client.dart';
 import 'package:mtg_scanner/data/scryfall/scryfall_models.dart';
 import 'package:mtg_scanner/features/scanner/parsed_ocr.dart';
 import 'package:mtg_scanner/features/scanner/scan_matcher.dart';
-import 'package:drift/drift.dart' show Value;
 
 class _FakeScry extends Mock implements ScryfallClient {}
 
@@ -18,117 +13,96 @@ ScryfallCard _card({
   String set = '2xm',
   String collector = '137',
   double? usd = 1.80,
+  double? usdFoil,
 }) =>
     ScryfallCard(
       id: id,
       name: name,
       set: set,
       collectorNumber: collector,
-      prices: ScryfallPrices(usd: usd, usdFoil: null),
+      prices: ScryfallPrices(usd: usd, usdFoil: usdFoil),
     );
 
-Future<int> _insertPendingScan(AppDatabase db, String rawName) =>
-    db.into(db.scans).insert(ScansCompanion.insert(
-          capturedAt: DateTime(2026, 4, 15),
-          rawName: rawName,
-          rawSetCollector: '',
-          confidence: const Value(0.0),
-          foilGuess: const Value(-1),
-        ));
-
 void main() {
-  late AppDatabase db;
   late _FakeScry scry;
-  late CollectionRepository collection;
-  late ScansRepository scans;
   late ScanMatcher matcher;
 
   setUp(() {
-    db = AppDatabase.forTesting(NativeDatabase.memory());
     scry = _FakeScry();
-    collection = CollectionRepository(db, scry);
-    scans = ScansRepository(db);
-    matcher = ScanMatcher(scry: scry, collection: collection, scans: scans, db: db);
+    matcher = ScanMatcher(scry: scry);
   });
-  tearDown(() => db.close());
 
-  test('exact set+collector match populates row and auto-confirms', () async {
-    final id = await _insertPendingScan(db, 'Lightning Bolt');
-    final parsed = ParsedOcr.from(
-        rawName: 'Lightning Bolt', rawSetCollector: '2xm 137');
+  test('exact set+collector match returns confidence 1.0', () async {
     when(() => scry.cardBySetAndNumber('2XM', '137'))
         .thenAnswer((_) async => _card());
 
-    await matcher.matchAfterInsert(scanId: id, parsed: parsed);
+    final result = await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
 
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
-        .getSingle();
-    expect(row.confidence, 1.0);
-    expect(row.status, 'confirmed');
-    final coll = await db.select(db.collection).get();
-    expect(coll, hasLength(1));
-    expect(coll.single.name, 'Lightning Bolt');
+    expect(result, isNotNull);
+    expect(result!.confidence, 1.0);
+    expect(result.card.name, 'Lightning Bolt');
   });
 
-  test('fuzzy fallback when set+collector 404 keeps row pending at 0.6', () async {
-    final id = await _insertPendingScan(db, 'Lightning Bolt');
-    final parsed = ParsedOcr.from(
-        rawName: 'Lightning Bolt', rawSetCollector: '2xm 999');
+  test('fuzzy fallback when exact 404s returns confidence 0.6', () async {
     when(() => scry.cardBySetAndNumber('2XM', '999'))
         .thenThrow(ScryfallNotFound('2xm/999'));
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenAnswer((_) async => _card());
 
-    await matcher.matchAfterInsert(scanId: id, parsed: parsed);
+    final result = await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: '2xm 999'));
 
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
-        .getSingle();
-    expect(row.confidence, closeTo(0.6, 1e-9));
-    expect(row.status, 'pending');
-    expect(row.matchedName, 'Lightning Bolt');
-    final coll = await db.select(db.collection).get();
-    expect(coll, isEmpty);
+    expect(result!.confidence, 0.6);
   });
 
-  test('no parsed set+collector goes straight to fuzzy', () async {
-    final id = await _insertPendingScan(db, 'Lightning Bolt');
-    final parsed = ParsedOcr.from(
-        rawName: 'Lightning Bolt', rawSetCollector: 'garbage');
+  test('fuzzy-only search when no set+collector present', () async {
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenAnswer((_) async => _card());
 
-    await matcher.matchAfterInsert(scanId: id, parsed: parsed);
+    final result = await matcher
+        .match(ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: ''));
 
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
-        .getSingle();
-    expect(row.confidence, closeTo(0.6, 1e-9));
-    verifyNever(() => scry.cardBySetAndNumber(any(), any()));
+    expect(result!.confidence, 0.6);
   });
 
-  test('both lookups fail -> confidence 0.0, row untouched at pending', () async {
-    final id = await _insertPendingScan(db, 'xxjj');
-    final parsed =
-        ParsedOcr.from(rawName: 'xxjj', rawSetCollector: 'garbage');
-    when(() => scry.cardByFuzzyName('xxjj'))
-        .thenThrow(ScryfallNotFound('xxjj'));
+  test('returns null when fuzzy 404s (no match found)', () async {
+    when(() => scry.cardByFuzzyName('Gibberish'))
+        .thenThrow(ScryfallNotFound('fuzzy'));
 
-    await matcher.matchAfterInsert(scanId: id, parsed: parsed);
+    final result = await matcher
+        .match(ParsedOcr.from(rawName: 'Gibberish', rawSetCollector: ''));
 
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
-        .getSingle();
-    expect(row.confidence, 0.0);
-    expect(row.matchedScryfallId, isNull);
-    expect(row.status, 'pending');
+    expect(result, isNull);
   });
 
-  test('empty parsed name and no set skips network and stays at 0.0', () async {
-    final id = await _insertPendingScan(db, '');
-    final parsed = ParsedOcr.from(rawName: '', rawSetCollector: '');
-    await matcher.matchAfterInsert(scanId: id, parsed: parsed);
+  test('returns null when parsed name is empty and no set+collector', () async {
+    final result =
+        await matcher.match(ParsedOcr.from(rawName: '', rawSetCollector: ''));
+
+    expect(result, isNull);
     verifyNever(() => scry.cardByFuzzyName(any()));
-    verifyNever(() => scry.cardBySetAndNumber(any(), any()));
-    final row = await (db.select(db.scans)..where((t) => t.id.equals(id)))
-        .getSingle();
-    expect(row.confidence, 0.0);
+  });
+
+  test('rethrows ScryfallException from exact lookup (network error)', () async {
+    when(() => scry.cardBySetAndNumber('2XM', '137'))
+        .thenThrow(ScryfallException('network down'));
+
+    expect(
+      () => matcher.match(
+          ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 137')),
+      throwsA(isA<ScryfallException>()),
+    );
+  });
+
+  test('rethrows ScryfallException from fuzzy lookup (network error)', () async {
+    when(() => scry.cardByFuzzyName('Lightning Bolt'))
+        .thenThrow(ScryfallException('network down'));
+
+    expect(
+      () => matcher
+          .match(ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '')),
+      throwsA(isA<ScryfallException>()),
+    );
   });
 }
