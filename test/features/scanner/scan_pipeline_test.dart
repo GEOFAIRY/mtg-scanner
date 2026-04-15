@@ -11,7 +11,6 @@ import 'package:mtg_scanner/features/scanner/ocr_runner.dart';
 import 'package:mtg_scanner/features/scanner/parsed_ocr.dart';
 import 'package:mtg_scanner/features/scanner/scan_matcher.dart';
 import 'package:mtg_scanner/features/scanner/scan_pipeline.dart';
-import 'package:mtg_scanner/features/scanner/scan_writer.dart';
 import 'package:mtg_scanner/features/scanner/thumbnail_storage.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -33,6 +32,7 @@ ScryfallCard _card({double? usd = 1.80, double? usdFoil}) => ScryfallCard(
       name: 'Lightning Bolt',
       set: '2xm',
       collectorNumber: '137',
+      rarity: 'uncommon',
       prices: ScryfallPrices(usd: usd, usdFoil: usdFoil),
     );
 
@@ -65,7 +65,6 @@ void main() {
 
   ScanPipeline _pipeline() => ScanPipeline(
         ocr: ocr,
-        writer: ScanWriter(db),
         storage: ThumbnailStorage(),
         matcher: matcher,
         collection: collection,
@@ -78,43 +77,41 @@ void main() {
     });
   }
 
-  test('matched outcome inserts scan, auto-confirms, returns price (non-foil)',
-      () async {
+  test('matched outcome adds to collection and returns id + price', () async {
     _stubOcr();
-    when(() => matcher.match(any()))
-        .thenAnswer((_) async => MatchResult(_card(), 1.0));
+    when(() => matcher.match(any())).thenAnswer((_) async => _card());
 
     final res =
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
     expect(res.outcome, CaptureOutcome.matched);
-    expect(res.matchedName, 'Lightning Bolt');
+    expect(res.card?.name, 'Lightning Bolt');
     expect(res.price, 1.80);
-    final rows = await db.select(db.scans).get();
+    expect(res.wasInsertion, isTrue);
+    expect(res.collectionId, isNotNull);
+
+    final rows = await db.select(db.collection).get();
     expect(rows, hasLength(1));
-    expect(rows.single.status, 'confirmed');
-    expect(rows.single.matchedName, 'Lightning Bolt');
-    expect(rows.single.priceUsd, 1.80);
-    final coll = await db.select(db.collection).get();
-    expect(coll, hasLength(1));
+    expect(rows.single.id, res.collectionId);
   });
 
-  test('matched outcome picks foil price when forceFoil is true', () async {
+  test('matched outcome with forceFoil picks foil price', () async {
     _stubOcr();
     when(() => matcher.match(any())).thenAnswer(
-        (_) async => MatchResult(_card(usd: 1.80, usdFoil: 5.50), 1.0));
+        (_) async => _card(usd: 1.80, usdFoil: 5.50));
 
     final res =
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
 
     expect(res.price, 5.50);
+    expect(res.foil, isTrue);
   });
 
   test('matched outcome falls back to non-foil when foil price is null',
       () async {
     _stubOcr();
     when(() => matcher.match(any())).thenAnswer(
-        (_) async => MatchResult(_card(usd: 1.80, usdFoil: null), 1.0));
+        (_) async => _card(usd: 1.80, usdFoil: null));
 
     final res =
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
@@ -122,22 +119,18 @@ void main() {
     expect(res.price, 1.80);
   });
 
-  test('low-confidence match inserts but does not auto-confirm', () async {
+  test('matched outcome reports wasInsertion=false on second scan', () async {
     _stubOcr();
-    when(() => matcher.match(any()))
-        .thenAnswer((_) async => MatchResult(_card(), 0.6));
+    when(() => matcher.match(any())).thenAnswer((_) async => _card());
 
-    final res =
+    await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+    final second =
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
-    expect(res.outcome, CaptureOutcome.matched);
-    final rows = await db.select(db.scans).get();
-    expect(rows.single.status, 'pending');
-    final coll = await db.select(db.collection).get();
-    expect(coll, isEmpty);
+    expect(second.wasInsertion, isFalse);
   });
 
-  test('no-match outcome: matcher returns null, nothing inserted', () async {
+  test('no-match outcome inserts nothing', () async {
     _stubOcr(name: 'Gibberish', setCol: '');
     when(() => matcher.match(any())).thenAnswer((_) async => null);
 
@@ -145,13 +138,12 @@ void main() {
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
     expect(res.outcome, CaptureOutcome.noMatch);
-    expect(res.price, isNull);
-    final rows = await db.select(db.scans).get();
-    expect(rows, isEmpty);
+    expect(res.card, isNull);
+    expect(res.collectionId, isNull);
+    expect(await db.select(db.collection).get(), isEmpty);
   });
 
-  test('offline outcome: ScryfallException becomes offline, nothing inserted',
-      () async {
+  test('offline outcome: ScryfallException becomes offline', () async {
     _stubOcr();
     when(() => matcher.match(any()))
         .thenThrow(ScryfallException('network down'));
@@ -160,8 +152,7 @@ void main() {
         await _pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
     expect(res.outcome, CaptureOutcome.offline);
-    final rows = await db.select(db.scans).get();
-    expect(rows, isEmpty);
+    expect(await db.select(db.collection).get(), isEmpty);
   });
 
   test('offline outcome: timeout beyond 4s becomes offline', () async {
@@ -175,7 +166,5 @@ void main() {
         .captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
     expect(res.outcome, CaptureOutcome.offline);
-    final rows = await db.select(db.scans).get();
-    expect(rows, isEmpty);
   }, timeout: const Timeout(Duration(seconds: 10)));
 }

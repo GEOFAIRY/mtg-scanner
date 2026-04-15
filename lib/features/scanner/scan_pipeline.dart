@@ -8,53 +8,56 @@ import 'foil_detector.dart';
 import 'ocr_runner.dart';
 import 'parsed_ocr.dart';
 import 'scan_matcher.dart';
-import 'scan_writer.dart';
 import 'thumbnail_storage.dart';
 
 enum CaptureOutcome { matched, noMatch, offline }
 
 class CaptureResult {
   CaptureResult.matched({
-    required this.id,
-    required this.matchedName,
+    required this.collectionId,
+    required this.card,
     required this.price,
+    required this.foil,
+    required this.wasInsertion,
   }) : outcome = CaptureOutcome.matched;
 
   CaptureResult.noMatch()
       : outcome = CaptureOutcome.noMatch,
-        id = null,
-        matchedName = null,
-        price = null;
+        collectionId = null,
+        card = null,
+        price = null,
+        foil = false,
+        wasInsertion = false;
 
   CaptureResult.offline()
       : outcome = CaptureOutcome.offline,
-        id = null,
-        matchedName = null,
-        price = null;
+        collectionId = null,
+        card = null,
+        price = null,
+        foil = false,
+        wasInsertion = false;
 
   final CaptureOutcome outcome;
-  final int? id;
-  final String? matchedName;
+  final int? collectionId;
+  final ScryfallCard? card;
   final double? price;
+  final bool foil;
+  final bool wasInsertion;
 }
 
 class ScanPipeline {
   ScanPipeline({
     required this.ocr,
-    required this.writer,
     required this.storage,
     required this.matcher,
     required this.collection,
-    this.autoConfirmThreshold = 0.8,
     this.matchTimeout = const Duration(seconds: 4),
   });
 
   final OcrRunner ocr;
-  final ScanWriter writer;
   final ThumbnailStorage storage;
   final ScanMatcher matcher;
   final CollectionRepository collection;
-  final double autoConfirmThreshold;
   final Duration matchTimeout;
 
   static const _nameRegion =
@@ -70,47 +73,36 @@ class ScanPipeline {
     final rawSet = await ocr.recognizeRegion(uprightPng, _setRegion);
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
 
-    final MatchResult? match;
+    final ScryfallCard? card;
     try {
-      match = await matcher.match(parsed).timeout(matchTimeout);
+      card = await matcher.match(parsed).timeout(matchTimeout);
     } on TimeoutException {
       return CaptureResult.offline();
     } on ScryfallException {
       return CaptureResult.offline();
     }
 
-    if (match == null) return CaptureResult.noMatch();
+    if (card == null) return CaptureResult.noMatch();
 
-    var foilGuess = 0;
-    if (forceFoil) {
-      foilGuess = 1;
-    } else {
+    var foil = forceFoil;
+    if (!foil) {
       try {
         final sig = detectFoil(uprightPng);
-        foilGuess = sig.isFoil ? 1 : 0;
+        foil = sig.isFoil;
       } catch (_) {
-        foilGuess = 0;
+        foil = false;
       }
     }
 
-    final thumbPath = await storage.save(uprightPng);
-    final id = await writer.insertMatched(
-      parsed: parsed,
-      thumbPath: thumbPath,
-      foilGuess: foilGuess,
-      match: match,
-    );
-
-    if (match.confidence >= autoConfirmThreshold) {
-      await collection.addFromScryfall(match.card, foil: foilGuess == 1);
-      await writer.markConfirmed(id);
-    }
-
-    final price = _selectPrice(match.card, forceFoil || foilGuess == 1);
+    await storage.save(uprightPng);
+    final result = await collection.addFromScryfall(card, foil: foil);
+    final price = _selectPrice(card, foil);
     return CaptureResult.matched(
-      id: id,
-      matchedName: match.card.name,
+      collectionId: result.id,
+      card: card,
       price: price,
+      foil: foil,
+      wasInsertion: result.wasInsertion,
     );
   }
 
