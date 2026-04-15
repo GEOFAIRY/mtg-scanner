@@ -12,6 +12,21 @@ class ScryfallPrices {
       v is String ? double.tryParse(v) : (v is num ? v.toDouble() : null);
 }
 
+class ScryfallSet {
+  ScryfallSet({
+    required this.code,
+    required this.name,
+  });
+
+  final String code;
+  final String name;
+
+  factory ScryfallSet.fromJson(Map<String, dynamic> j) => ScryfallSet(
+        code: j['code'] as String,
+        name: j['name'] as String,
+      );
+}
+
 class ScryfallCard {
   ScryfallCard({
     required this.id,

@@ -100,6 +100,7 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
                     builder: (ctx, st) => CollectionDetailScreen(
                       id: int.parse(st.pathParameters['id']!),
                       repo: deps.collection,
+                      scry: deps.scry
                     ),
                   ),
                 ],

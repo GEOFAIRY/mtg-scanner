@@ -100,4 +100,17 @@ class ScryfallClient {
           .toList();
     });
   }
+
+  Future<ScryfallSet> setByCode(String code) {
+    return _throttled(() async {
+      final uri = Uri.parse('$_base/sets/$code');
+      final r = await _http.get(uri, headers: _headers);
+      if (r.statusCode == 404) throw ScryfallNotFound(code);
+      if (r.statusCode >= 400) {
+        throw ScryfallException(r.body, statusCode: r.statusCode);
+      }
+      return ScryfallSet.fromJson(
+          jsonDecode(r.body) as Map<String, dynamic>);
+    });
+  }
 }
