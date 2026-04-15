@@ -3,12 +3,13 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import '../../app_settings.dart';
-import '../../data/db/database.dart';
-import '../../data/repositories/scans_repository.dart';
+import '../../data/repositories/collection_repository.dart';
+import '../../data/scryfall/scryfall_client.dart';
+import 'edit_scan_modal.dart';
 import 'perspective_correct.dart';
+import 'result_banner.dart';
 import 'scan_pipeline.dart';
 import 'scanner_state.dart';
 import 'stability_detector.dart';
@@ -18,39 +19,44 @@ final appRouteObserver = RouteObserver<ModalRoute<void>>();
 
 class ScannerScreen extends StatelessWidget {
   const ScannerScreen({
-    required this.scans,
     required this.pipeline,
     required this.settings,
     required this.valuePlayer,
+    required this.collection,
+    required this.scry,
     super.key,
   });
-  final ScansRepository scans;
   final ScanPipeline pipeline;
   final AppSettings settings;
   final AudioPlayer valuePlayer;
+  final CollectionRepository collection;
+  final ScryfallClient scry;
 
   @override
   Widget build(BuildContext context) => CameraPermissionGate(
         child: (ctx) => _ScannerBody(
-          scans: scans,
           pipeline: pipeline,
           settings: settings,
           valuePlayer: valuePlayer,
+          collection: collection,
+          scry: scry,
         ),
       );
 }
 
 class _ScannerBody extends StatefulWidget {
   const _ScannerBody({
-    required this.scans,
     required this.pipeline,
     required this.settings,
     required this.valuePlayer,
+    required this.collection,
+    required this.scry,
   });
-  final ScansRepository scans;
   final ScanPipeline pipeline;
   final AppSettings settings;
   final AudioPlayer valuePlayer;
+  final CollectionRepository collection;
+  final ScryfallClient scry;
   @override
   State<_ScannerBody> createState() => _ScannerBodyState();
 }
@@ -61,6 +67,7 @@ class _ScannerBodyState extends State<_ScannerBody>
   final _state = ScannerStateNotifier();
   final _tracker = StabilityTracker();
   final _forceFoil = ValueNotifier<bool>(false);
+  final _banner = ValueNotifier<BannerData?>(null);
   bool _busy = false;
   DateTime? _lastCaptureAt;
   String? _lastLabel;
@@ -209,23 +216,27 @@ class _ScannerBodyState extends State<_ScannerBody>
 
       switch (res.outcome) {
         case CaptureOutcome.matched:
-          final name = res.matchedName ?? 'scan';
+          final name = res.card!.name;
           if (_lastLabel != null && _lastLabel == name) {
             _state.toSearching();
             _tracker.reset();
             return;
           }
           _lastLabel = name;
-          _state.toDone(
-            name,
+          _banner.value = BannerData(
+            collectionId: res.collectionId!,
+            card: res.card!,
             price: res.price,
-            newInQueue: _state.value.inQueue + 1,
+            foil: res.foil,
+            wasInsertion: res.wasInsertion,
           );
+          _state.toSearching();
           if (res.price != null &&
               res.price! > widget.settings.valueAlertThreshold) {
             unawaited(_playValueAlert());
           }
-          break;
+          _tracker.reset();
+          return;
         case CaptureOutcome.noMatch:
           _state.toNoMatch();
           break;
@@ -246,6 +257,76 @@ class _ScannerBodyState extends State<_ScannerBody>
       await widget.valuePlayer.stop();
       await widget.valuePlayer.resume();
     } catch (_) {}
+  }
+
+  Future<void> _onDismissBanner() async {
+    final d = _banner.value;
+    if (d == null) return;
+    _banner.value = null;
+    _lastLabel = null;
+    await widget.collection
+        .undoAdd(id: d.collectionId, wasInsertion: d.wasInsertion);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(SnackBar(
+      content: Text('Dismissed ${d.card.name}'),
+      duration: const Duration(seconds: 5),
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () async {
+          final result = await widget.collection
+              .addFromScryfall(d.card, foil: d.foil);
+          if (!mounted) return;
+          _banner.value = BannerData(
+            collectionId: result.id,
+            card: d.card,
+            price: d.price,
+            foil: d.foil,
+            wasInsertion: result.wasInsertion,
+          );
+        },
+      ),
+    ));
+  }
+
+  Future<void> _onEditBanner() async {
+    final d = _banner.value;
+    if (d == null) return;
+    await _pauseStream();
+    final current = await (widget.collection.db.select(widget.collection.db.collection)
+          ..where((t) => t.id.equals(d.collectionId)))
+        .getSingleOrNull();
+    if (!mounted) return;
+    final currentCount = current?.count ?? 1;
+    final result = await Navigator.of(context).push<EditScanResult>(
+      MaterialPageRoute(
+        builder: (_) => EditScanModal(
+          initialCard: d.card,
+          initialFoil: d.foil,
+          initialCount: currentCount,
+          collection: widget.collection,
+          scry: widget.scry,
+          collectionId: d.collectionId,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      _banner.value = BannerData(
+        collectionId: d.collectionId,
+        card: result.card,
+        price: (result.foil
+                ? result.card.prices.usdFoil
+                : result.card.prices.usd) ??
+            result.card.prices.usd ??
+            result.card.prices.usdFoil,
+        foil: result.foil,
+        wasInsertion: d.wasInsertion,
+      );
+      _lastLabel = result.card.name;
+    }
+    await _resumeStreamIfNotPaused();
   }
 
   Uint8List? _bgrJpegFromFrame(CameraImage img) {
@@ -296,62 +377,58 @@ class _ScannerBodyState extends State<_ScannerBody>
     _controller?.dispose();
     _state.dispose();
     _forceFoil.dispose();
+    _banner.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = _controller;
-    if (c == null || !c.value.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
     return Scaffold(
-      drawer: _ScannerDrawer(scans: widget.scans),
-      onDrawerChanged: (open) {
-        if (open) {
-          _pauseStream();
-        } else if (_modalRoute?.isCurrent ?? true) {
-          _resumeStreamIfNotPaused();
-        }
-      },
       body: Stack(
         fit: StackFit.expand,
         children: [
-          CameraPreview(c),
+          (c == null || !c.value.isInitialized)
+              ? const ColoredBox(color: Colors.black)
+              : CameraPreview(c),
           ValueListenableBuilder<ScannerState>(
             valueListenable: _state,
             builder: (_, s, __) => _Overlay(state: s),
           ),
           Positioned(
-            top: 12,
-            left: 12,
-            child: Builder(
-              builder: (ctx) => _Chip(
-                icon: Icons.menu,
-                onTap: () async {
-                  await _pauseStream();
-                  if (!context.mounted) return;
-                  Scaffold.of(ctx).openDrawer();
-                },
+            bottom: 100,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _forceFoil,
+                builder: (_, on, __) => AnimatedOpacity(
+                  opacity: on ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECC460),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome,
+                            color: Colors.black, size: 14),
+                        SizedBox(width: 4),
+                        Text('FOIL MODE',
+                            style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: StreamBuilder<List<Scan>>(
-              stream: widget.scans.watchPending(),
-              builder: (_, snap) {
-                final n = snap.data?.length ?? 0;
-                return _Chip(
-                  label: '$n in queue',
-                  onTap: () async {
-                    await _pauseStream();
-                    if (!context.mounted) return;
-                    context.push('/queue');
-                  },
-                );
-              },
             ),
           ),
           Positioned(
@@ -365,7 +442,7 @@ class _ScannerBodyState extends State<_ScannerBody>
                   valueListenable: _forceFoil,
                   builder: (_, on, __) => _ToggleButton(
                     icon: Icons.auto_awesome,
-                    label: 'Foil',
+                    label: on ? 'Foil ON' : 'Foil OFF',
                     on: on,
                     onTap: () => _forceFoil.value = !_forceFoil.value,
                   ),
@@ -396,12 +473,27 @@ class _ScannerBodyState extends State<_ScannerBody>
                     on: s.torchOn,
                     onTap: () async {
                       _state.toggleTorch();
-                      await c.setFlashMode(
-                          _state.value.torchOn ? FlashMode.torch : FlashMode.off);
+                      try {
+                        await c?.setFlashMode(
+                            s.torchOn ? FlashMode.off : FlashMode.torch);
+                      } catch (_) {}
                     },
                   ),
                 ),
               ],
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: ValueListenableBuilder<BannerData?>(
+              valueListenable: _banner,
+              builder: (_, d, __) => ResultBanner(
+                data: d,
+                onDismiss: _onDismissBanner,
+                onEdit: _onEditBanner,
+              ),
             ),
           ),
         ],
@@ -417,12 +509,6 @@ class _Overlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final (text, color) = switch (state.phase) {
       ScannerPhase.matching => ('\u22EF matching…', Colors.white70),
-      ScannerPhase.done when state.lastCardLabel != null => (
-          state.lastCardPrice != null
-              ? '\u2713 ${state.lastCardLabel} — \$${state.lastCardPrice!.toStringAsFixed(2)}'
-              : '\u2713 ${state.lastCardLabel}',
-          Colors.white,
-        ),
       ScannerPhase.noMatch => ('\u2717 no match', Colors.redAccent),
       ScannerPhase.offline => ('\u26A0 offline', Colors.orangeAccent),
       _ => (null, Colors.white),
@@ -443,37 +529,6 @@ class _Overlay extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({this.icon, this.label, required this.onTap});
-  final IconData? icon;
-  final String? label;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Material(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: label == null ? 10 : 14, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null)
-                  Icon(icon, color: Colors.white, size: 22),
-                if (icon != null && label != null) const SizedBox(width: 6),
-                if (label != null)
-                  Text(label!,
-                      style: const TextStyle(color: Colors.white, fontSize: 13)),
-              ],
-            ),
-          ),
-        ),
-      );
 }
 
 class _ToggleButton extends StatelessWidget {
@@ -513,75 +568,4 @@ class _ToggleButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ScannerDrawer extends StatelessWidget {
-  const _ScannerDrawer({required this.scans});
-  final ScansRepository scans;
-  @override
-  Widget build(BuildContext context) => Drawer(
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Review queue',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600)),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: StreamBuilder<List<Scan>>(
-                  stream: scans.watchPending(),
-                  builder: (_, snap) {
-                    final items = snap.data ?? const [];
-                    if (items.isEmpty) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('No pending scans',
-                              style: TextStyle(color: Colors.grey)),
-                        ),
-                      );
-                    }
-                    return ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final s = items[i];
-                        final title = s.matchedName ??
-                            (s.rawName.trim().isEmpty
-                                ? '(unmatched)'
-                                : 'OCR: ${s.rawName}');
-                        return ListTile(
-                          dense: true,
-                          title: Text(title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                              '${(s.confidence * 100).toStringAsFixed(0)}%'),
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            context.push('/queue');
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.inbox),
-                title: const Text('Open full review queue'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/queue');
-                },
-              ),
-            ],
-          ),
-        ),
-      );
 }
