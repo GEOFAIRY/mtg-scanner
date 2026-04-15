@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'foil_detector.dart';
 import 'ocr_runner.dart';
 import 'parsed_ocr.dart';
 import 'scan_matcher.dart';
@@ -30,8 +31,15 @@ class ScanPipeline {
     final parsed =
         ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
     final thumbPath = await storage.save(uprightPng);
-    final id = await writer.insertPending(parsed: parsed, thumbPath: thumbPath);
-    // Fire-and-forget so the scanner loop isn't blocked by Scryfall latency.
+    var foilGuess = 0;
+    try {
+      final sig = detectFoil(uprightPng);
+      foilGuess = sig.isFoil ? 1 : 0;
+    } catch (_) {
+      foilGuess = 0;
+    }
+    final id = await writer.insertPending(
+        parsed: parsed, thumbPath: thumbPath, foilGuess: foilGuess);
     unawaited(matcher.matchAfterInsert(scanId: id, parsed: parsed));
     final label = parsed.name.isNotEmpty ? parsed.name : 'scan';
     return (id: id, label: label);
