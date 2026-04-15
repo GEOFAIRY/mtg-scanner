@@ -70,7 +70,7 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
   }
 
   GoRouter _buildRouter(Deps deps) => GoRouter(
-        initialLocation: '/collection',
+        initialLocation: '/scan',
         routes: [
           ShellRoute(
             observers: [appRouteObserver],
