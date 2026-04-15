@@ -11,7 +11,8 @@ import 'features/scanner/ocr_runner.dart';
 import 'features/scanner/scan_matcher.dart';
 import 'features/scanner/scan_pipeline.dart';
 import 'features/scanner/scan_writer.dart';
-import 'features/scanner/scanner_screen.dart';
+import 'features/scanner/scanner_screen.dart'
+    show ScannerScreen, appRouteObserver;
 import 'features/scanner/thumbnail_storage.dart';
 import 'features/review_queue/review_queue_screen.dart';
 import 'features/collection/collection_screen.dart';
@@ -48,12 +49,6 @@ class Deps {
   }
 }
 
-/// Shared across the app so screens can react to route pushes/pops
-/// (e.g., the scanner screen pausing its camera stream when the review
-/// queue is pushed on top of it).
-final RouteObserver<ModalRoute<void>> appRouteObserver =
-    RouteObserver<ModalRoute<void>>();
-
 class MtgScannerApp extends StatefulWidget {
   const MtgScannerApp({super.key});
   @override
@@ -64,9 +59,9 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
   late final Deps deps = Deps.create();
   late final GoRouter _router = GoRouter(
     initialLocation: '/collection',
-    observers: [appRouteObserver],
     routes: [
       ShellRoute(
+        observers: [appRouteObserver],
         builder: (ctx, state, child) =>
             AppShell(location: state.matchedLocation, child: child),
         routes: [

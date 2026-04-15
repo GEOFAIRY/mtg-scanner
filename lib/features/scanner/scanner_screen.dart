@@ -3,7 +3,6 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
-import '../../app.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/scans_repository.dart';
 import 'perspective_correct.dart';
@@ -11,6 +10,8 @@ import 'scan_pipeline.dart';
 import 'scanner_state.dart';
 import 'stability_detector.dart';
 import 'permission_gate.dart';
+
+final appRouteObserver = RouteObserver<ModalRoute<void>>();
 
 class ScannerScreen extends StatelessWidget {
   const ScannerScreen({required this.scans, required this.pipeline, super.key});
@@ -32,7 +33,7 @@ class _ScannerBody extends StatefulWidget {
 }
 
 class _ScannerBodyState extends State<_ScannerBody>
-    with RouteAware, WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   CameraController? _controller;
   final _state = ScannerStateNotifier();
   final _tracker = StabilityTracker();
@@ -41,7 +42,9 @@ class _ScannerBodyState extends State<_ScannerBody>
   DateTime? _lastCaptureAt;
   String? _lastLabel;
   bool _streamActive = false;
-  ModalRoute<void>? _route;
+  bool _externallyPaused = false;
+  bool _initializing = false;
+  ModalRoute<void>? _modalRoute;
 
   @override
   void initState() {
@@ -54,9 +57,9 @@ class _ScannerBodyState extends State<_ScannerBody>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final r = ModalRoute.of(context);
-    if (r != _route) {
-      if (_route != null) appRouteObserver.unsubscribe(this);
-      _route = r;
+    if (r != _modalRoute) {
+      if (_modalRoute != null) appRouteObserver.unsubscribe(this);
+      _modalRoute = r;
       if (r != null) appRouteObserver.subscribe(this, r);
     }
   }
@@ -72,11 +75,12 @@ class _ScannerBodyState extends State<_ScannerBody>
     if (state == AppLifecycleState.resumed) {
       _resumeStreamIfNotPaused();
     } else {
-      _pauseStream();
+      _releaseCamera();
     }
   }
 
   Future<void> _pauseStream() async {
+    _externallyPaused = true;
     final c = _controller;
     if (c == null || !c.value.isInitialized || !_streamActive) return;
     _streamActive = false;
@@ -86,9 +90,14 @@ class _ScannerBodyState extends State<_ScannerBody>
   }
 
   Future<void> _resumeStreamIfNotPaused() async {
+    if (_state.value.paused) return;
+    _externallyPaused = false;
     final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
-    if (_state.value.paused || _streamActive) return;
+    if (c == null || !c.value.isInitialized) {
+      await _init();
+      return;
+    }
+    if (_streamActive) return;
     _streamActive = true;
     try {
       await c.startImageStream(_onFrame);
@@ -97,22 +106,52 @@ class _ScannerBodyState extends State<_ScannerBody>
     }
   }
 
+  Future<void> _releaseCamera() async {
+    _externallyPaused = true;
+    _streamActive = false;
+    final c = _controller;
+    if (c == null) return;
+    _controller = null;
+    if (mounted) setState(() {});
+    try {
+      await c.dispose();
+    } catch (_) {}
+  }
+
   Future<void> _init() async {
-    final cams = await availableCameras();
-    final back = cams.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cams.first);
-    final c = CameraController(back, ResolutionPreset.high,
-        enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420);
-    await c.initialize();
-    if (!mounted) return;
-    setState(() => _controller = c);
-    _streamActive = true;
-    await c.startImageStream(_onFrame);
+    if (_initializing || _controller != null) return;
+    _initializing = true;
+    try {
+      final cams = await availableCameras();
+      final back = cams.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+          orElse: () => cams.first);
+      final c = CameraController(back, ResolutionPreset.high,
+          enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420);
+      try {
+        await c.initialize();
+      } catch (_) {
+        return;
+      }
+      if (!mounted) {
+        await c.dispose();
+        return;
+      }
+      setState(() => _controller = c);
+      _streamActive = true;
+      _externallyPaused = false;
+      try {
+        await c.startImageStream(_onFrame);
+      } catch (_) {
+        _streamActive = false;
+      }
+    } finally {
+      _initializing = false;
+    }
   }
 
   Future<void> _onFrame(CameraImage img) async {
-    if (_busy || _state.value.paused) return;
+    if (_busy || _state.value.paused || _externallyPaused) return;
     _busy = true;
     try {
       final bytes = _bgrJpegFromFrame(img);
@@ -131,11 +170,16 @@ class _ScannerBodyState extends State<_ScannerBody>
           _lastCaptureAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (sinceLast.inMilliseconds < 500) return;
 
+      if (_externallyPaused || _state.value.paused) return;
       _state.toCapturing();
       final upright = warpToUpright(bytes, quad: rect.quad);
       _state.toProcessing();
       final res = await widget.pipeline
           .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
+      if (_externallyPaused || _state.value.paused) {
+        await widget.scans.reject(res.id);
+        return;
+      }
       _lastCaptureAt = DateTime.now();
 
       if (_lastLabel != null && _lastLabel == res.label) return;
@@ -192,7 +236,7 @@ class _ScannerBodyState extends State<_ScannerBody>
 
   @override
   void dispose() {
-    appRouteObserver.unsubscribe(this);
+    if (_modalRoute != null) appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     _state.dispose();
@@ -208,6 +252,13 @@ class _ScannerBodyState extends State<_ScannerBody>
     }
     return Scaffold(
       drawer: _ScannerDrawer(scans: widget.scans),
+      onDrawerChanged: (open) {
+        if (open) {
+          _pauseStream();
+        } else if (_modalRoute?.isCurrent ?? true) {
+          _resumeStreamIfNotPaused();
+        }
+      },
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -222,7 +273,11 @@ class _ScannerBodyState extends State<_ScannerBody>
             child: Builder(
               builder: (ctx) => _Chip(
                 icon: Icons.menu,
-                onTap: () => Scaffold.of(ctx).openDrawer(),
+                onTap: () async {
+                  await _pauseStream();
+                  if (!context.mounted) return;
+                  Scaffold.of(ctx).openDrawer();
+                },
               ),
             ),
           ),
@@ -235,7 +290,11 @@ class _ScannerBodyState extends State<_ScannerBody>
                 final n = snap.data?.length ?? 0;
                 return _Chip(
                   label: '$n in queue',
-                  onTap: () => context.push('/queue'),
+                  onTap: () async {
+                    await _pauseStream();
+                    if (!context.mounted) return;
+                    context.push('/queue');
+                  },
                 );
               },
             ),
