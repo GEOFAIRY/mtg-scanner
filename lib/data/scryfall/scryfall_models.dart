@@ -21,6 +21,7 @@ class ScryfallCard {
     required this.prices,
     this.imageUriSmall,
     this.imageUriNormal,
+    this.rarity,
   });
 
   final String id;
@@ -30,6 +31,7 @@ class ScryfallCard {
   final ScryfallPrices prices;
   final String? imageUriSmall;
   final String? imageUriNormal;
+  final String? rarity;
 
   factory ScryfallCard.fromJson(Map<String, dynamic> j) {
     final imgs = (j['image_uris'] as Map<String, dynamic>?) ??
@@ -41,9 +43,10 @@ class ScryfallCard {
       set: j['set'] as String,
       collectorNumber: j['collector_number'] as String,
       prices: ScryfallPrices.fromJson(
-          (j['prices'] as Map<String, dynamic>?) ?? const {}),
+          (j['prices'] as Map?)?.cast<String, dynamic>() ?? const {}),
       imageUriSmall: imgs?['small'] as String?,
       imageUriNormal: imgs?['normal'] as String?,
+      rarity: j['rarity'] as String?,
     );
   }
 }
