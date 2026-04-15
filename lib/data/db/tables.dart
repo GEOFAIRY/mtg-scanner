@@ -16,4 +16,5 @@ class Collection extends Table {
   DateTimeColumn get priceUpdatedAt => dateTime().nullable()();
   TextColumn get notes => text().nullable()();
   TextColumn get rarity => text().nullable()();
+  TextColumn get imageSmall => text().nullable()();
 }

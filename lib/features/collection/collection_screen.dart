@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../shared/widgets/price_text.dart';
+import '../../shared/widgets/set_icon.dart';
 
 enum _Sort { set, nameAsc, priceDesc, dateDesc }
 
@@ -105,8 +106,41 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   itemBuilder: (_, i) {
                     final r = rows[i];
                     return ListTile(
+                      leading: SizedBox(
+                        width: 40,
+                        height: 56,
+                        child: r.imageSmall == null
+                            ? const ColoredBox(
+                                color: Color(0x11000000),
+                                child: Icon(Icons.image_outlined,
+                                    size: 20, color: Colors.grey),
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: Image.network(
+                                  r.imageSmall!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const ColoredBox(
+                                    color: Color(0x11000000),
+                                    child: Icon(Icons.broken_image,
+                                        size: 20, color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                      ),
                       title: Text('${r.count}× ${r.name}${r.foil == 1 ? " ✦" : ""}'),
-                      subtitle: Text('${r.setCode.toUpperCase()} · ${r.collectorNumber}'),
+                      subtitle: Row(
+                        children: [
+                          SetIcon(code: r.setCode, size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '${r.setCode.toUpperCase()} · ${r.collectorNumber}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                       trailing: PriceText(
                         usd: r.foil == 1 ? (r.priceUsdFoil ?? r.priceUsd) : r.priceUsd,
                         updatedAt: r.priceUpdatedAt,

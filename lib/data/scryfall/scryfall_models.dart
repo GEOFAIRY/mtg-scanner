@@ -32,6 +32,7 @@ class ScryfallCard {
     required this.id,
     required this.name,
     required this.set,
+    required this.setName,
     required this.collectorNumber,
     required this.prices,
     this.imageUriSmall,
@@ -42,6 +43,7 @@ class ScryfallCard {
   final String id;
   final String name;
   final String set;
+  final String setName;
   final String collectorNumber;
   final ScryfallPrices prices;
   final String? imageUriSmall;
@@ -56,6 +58,7 @@ class ScryfallCard {
       id: j['id'] as String,
       name: j['name'] as String,
       set: j['set'] as String,
+      setName: (j['set_name'] as String?) ?? (j['set'] as String),
       collectorNumber: j['collector_number'] as String,
       prices: ScryfallPrices.fromJson(
           (j['prices'] as Map?)?.cast<String, dynamic>() ?? const {}),

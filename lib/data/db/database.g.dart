@@ -171,6 +171,17 @@ class $CollectionTable extends Collection
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imageSmallMeta = const VerificationMeta(
+    'imageSmall',
+  );
+  @override
+  late final GeneratedColumn<String> imageSmall = GeneratedColumn<String>(
+    'image_small',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -188,6 +199,7 @@ class $CollectionTable extends Collection
     priceUpdatedAt,
     notes,
     rarity,
+    imageSmall,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -307,6 +319,12 @@ class $CollectionTable extends Collection
         rarity.isAcceptableOrUnknown(data['rarity']!, _rarityMeta),
       );
     }
+    if (data.containsKey('image_small')) {
+      context.handle(
+        _imageSmallMeta,
+        imageSmall.isAcceptableOrUnknown(data['image_small']!, _imageSmallMeta),
+      );
+    }
     return context;
   }
 
@@ -376,6 +394,10 @@ class $CollectionTable extends Collection
         DriftSqlType.string,
         data['${effectivePrefix}rarity'],
       ),
+      imageSmall: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_small'],
+      ),
     );
   }
 
@@ -401,6 +423,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
   final DateTime? priceUpdatedAt;
   final String? notes;
   final String? rarity;
+  final String? imageSmall;
   const CollectionData({
     required this.id,
     required this.scryfallId,
@@ -417,6 +440,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     this.priceUpdatedAt,
     this.notes,
     this.rarity,
+    this.imageSmall,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -445,6 +469,9 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     }
     if (!nullToAbsent || rarity != null) {
       map['rarity'] = Variable<String>(rarity);
+    }
+    if (!nullToAbsent || imageSmall != null) {
+      map['image_small'] = Variable<String>(imageSmall);
     }
     return map;
   }
@@ -476,6 +503,9 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       rarity: rarity == null && nullToAbsent
           ? const Value.absent()
           : Value(rarity),
+      imageSmall: imageSmall == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageSmall),
     );
   }
 
@@ -500,6 +530,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       priceUpdatedAt: serializer.fromJson<DateTime?>(json['priceUpdatedAt']),
       notes: serializer.fromJson<String?>(json['notes']),
       rarity: serializer.fromJson<String?>(json['rarity']),
+      imageSmall: serializer.fromJson<String?>(json['imageSmall']),
     );
   }
   @override
@@ -521,6 +552,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       'priceUpdatedAt': serializer.toJson<DateTime?>(priceUpdatedAt),
       'notes': serializer.toJson<String?>(notes),
       'rarity': serializer.toJson<String?>(rarity),
+      'imageSmall': serializer.toJson<String?>(imageSmall),
     };
   }
 
@@ -540,6 +572,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     Value<DateTime?> priceUpdatedAt = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<String?> rarity = const Value.absent(),
+    Value<String?> imageSmall = const Value.absent(),
   }) => CollectionData(
     id: id ?? this.id,
     scryfallId: scryfallId ?? this.scryfallId,
@@ -558,6 +591,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
         : this.priceUpdatedAt,
     notes: notes.present ? notes.value : this.notes,
     rarity: rarity.present ? rarity.value : this.rarity,
+    imageSmall: imageSmall.present ? imageSmall.value : this.imageSmall,
   );
   CollectionData copyWithCompanion(CollectionCompanion data) {
     return CollectionData(
@@ -584,6 +618,9 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
           : this.priceUpdatedAt,
       notes: data.notes.present ? data.notes.value : this.notes,
       rarity: data.rarity.present ? data.rarity.value : this.rarity,
+      imageSmall: data.imageSmall.present
+          ? data.imageSmall.value
+          : this.imageSmall,
     );
   }
 
@@ -604,7 +641,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
           ..write('priceUsdFoil: $priceUsdFoil, ')
           ..write('priceUpdatedAt: $priceUpdatedAt, ')
           ..write('notes: $notes, ')
-          ..write('rarity: $rarity')
+          ..write('rarity: $rarity, ')
+          ..write('imageSmall: $imageSmall')
           ..write(')'))
         .toString();
   }
@@ -626,6 +664,7 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     priceUpdatedAt,
     notes,
     rarity,
+    imageSmall,
   );
   @override
   bool operator ==(Object other) =>
@@ -645,7 +684,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
           other.priceUsdFoil == this.priceUsdFoil &&
           other.priceUpdatedAt == this.priceUpdatedAt &&
           other.notes == this.notes &&
-          other.rarity == this.rarity);
+          other.rarity == this.rarity &&
+          other.imageSmall == this.imageSmall);
 }
 
 class CollectionCompanion extends UpdateCompanion<CollectionData> {
@@ -664,6 +704,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
   final Value<DateTime?> priceUpdatedAt;
   final Value<String?> notes;
   final Value<String?> rarity;
+  final Value<String?> imageSmall;
   const CollectionCompanion({
     this.id = const Value.absent(),
     this.scryfallId = const Value.absent(),
@@ -680,6 +721,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     this.priceUpdatedAt = const Value.absent(),
     this.notes = const Value.absent(),
     this.rarity = const Value.absent(),
+    this.imageSmall = const Value.absent(),
   });
   CollectionCompanion.insert({
     this.id = const Value.absent(),
@@ -697,6 +739,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     this.priceUpdatedAt = const Value.absent(),
     this.notes = const Value.absent(),
     this.rarity = const Value.absent(),
+    this.imageSmall = const Value.absent(),
   }) : scryfallId = Value(scryfallId),
        name = Value(name),
        setCode = Value(setCode),
@@ -718,6 +761,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     Expression<DateTime>? priceUpdatedAt,
     Expression<String>? notes,
     Expression<String>? rarity,
+    Expression<String>? imageSmall,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -735,6 +779,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
       if (priceUpdatedAt != null) 'price_updated_at': priceUpdatedAt,
       if (notes != null) 'notes': notes,
       if (rarity != null) 'rarity': rarity,
+      if (imageSmall != null) 'image_small': imageSmall,
     });
   }
 
@@ -754,6 +799,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     Value<DateTime?>? priceUpdatedAt,
     Value<String?>? notes,
     Value<String?>? rarity,
+    Value<String?>? imageSmall,
   }) {
     return CollectionCompanion(
       id: id ?? this.id,
@@ -771,6 +817,7 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
       notes: notes ?? this.notes,
       rarity: rarity ?? this.rarity,
+      imageSmall: imageSmall ?? this.imageSmall,
     );
   }
 
@@ -822,6 +869,9 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     if (rarity.present) {
       map['rarity'] = Variable<String>(rarity.value);
     }
+    if (imageSmall.present) {
+      map['image_small'] = Variable<String>(imageSmall.value);
+    }
     return map;
   }
 
@@ -842,7 +892,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
           ..write('priceUsdFoil: $priceUsdFoil, ')
           ..write('priceUpdatedAt: $priceUpdatedAt, ')
           ..write('notes: $notes, ')
-          ..write('rarity: $rarity')
+          ..write('rarity: $rarity, ')
+          ..write('imageSmall: $imageSmall')
           ..write(')'))
         .toString();
   }
@@ -877,6 +928,7 @@ typedef $$CollectionTableCreateCompanionBuilder =
       Value<DateTime?> priceUpdatedAt,
       Value<String?> notes,
       Value<String?> rarity,
+      Value<String?> imageSmall,
     });
 typedef $$CollectionTableUpdateCompanionBuilder =
     CollectionCompanion Function({
@@ -895,6 +947,7 @@ typedef $$CollectionTableUpdateCompanionBuilder =
       Value<DateTime?> priceUpdatedAt,
       Value<String?> notes,
       Value<String?> rarity,
+      Value<String?> imageSmall,
     });
 
 class $$CollectionTableFilterComposer
@@ -978,6 +1031,11 @@ class $$CollectionTableFilterComposer
 
   ColumnFilters<String> get rarity => $composableBuilder(
     column: $table.rarity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageSmall => $composableBuilder(
+    column: $table.imageSmall,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1065,6 +1123,11 @@ class $$CollectionTableOrderingComposer
     column: $table.rarity,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get imageSmall => $composableBuilder(
+    column: $table.imageSmall,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CollectionTableAnnotationComposer
@@ -1128,6 +1191,11 @@ class $$CollectionTableAnnotationComposer
 
   GeneratedColumn<String> get rarity =>
       $composableBuilder(column: $table.rarity, builder: (column) => column);
+
+  GeneratedColumn<String> get imageSmall => $composableBuilder(
+    column: $table.imageSmall,
+    builder: (column) => column,
+  );
 }
 
 class $$CollectionTableTableManager
@@ -1176,6 +1244,7 @@ class $$CollectionTableTableManager
                 Value<DateTime?> priceUpdatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
+                Value<String?> imageSmall = const Value.absent(),
               }) => CollectionCompanion(
                 id: id,
                 scryfallId: scryfallId,
@@ -1192,6 +1261,7 @@ class $$CollectionTableTableManager
                 priceUpdatedAt: priceUpdatedAt,
                 notes: notes,
                 rarity: rarity,
+                imageSmall: imageSmall,
               ),
           createCompanionCallback:
               ({
@@ -1210,6 +1280,7 @@ class $$CollectionTableTableManager
                 Value<DateTime?> priceUpdatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
+                Value<String?> imageSmall = const Value.absent(),
               }) => CollectionCompanion.insert(
                 id: id,
                 scryfallId: scryfallId,
@@ -1226,6 +1297,7 @@ class $$CollectionTableTableManager
                 priceUpdatedAt: priceUpdatedAt,
                 notes: notes,
                 rarity: rarity,
+                imageSmall: imageSmall,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

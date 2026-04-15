@@ -4,6 +4,8 @@ import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
 import '../../shared/widgets/price_text.dart';
+import '../../shared/widgets/set_icon.dart';
+import '../scanner/edit_scan_modal.dart';
 
 class CollectionDetailScreen extends StatefulWidget {
   const CollectionDetailScreen({
@@ -61,10 +63,51 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     super.dispose();
   }
 
+  Future<void> _edit(CollectionData r) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final card = await _loadCard(r);
+    if (!mounted) return;
+    if (card == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not load card details (offline?)')),
+      );
+      return;
+    }
+    final result = await navigator.push<EditScanResult>(
+      MaterialPageRoute(
+        builder: (_) => EditScanModal(
+          initialCard: card,
+          initialFoil: r.foil == 1,
+          initialCount: r.count,
+          collection: widget.repo,
+          scry: widget.scry,
+          collectionId: r.id,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      setState(() => _future = widget.repo.getById(widget.id));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Card')),
+      appBar: AppBar(
+        title: const Text('Card'),
+        actions: [
+          FutureBuilder<CollectionData>(
+            future: _future,
+            builder: (_, snap) => IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit',
+              onPressed: snap.hasData ? () => _edit(snap.data!) : null,
+            ),
+          ),
+        ],
+      ),
       body: FutureBuilder<CollectionData>(
         future: _future,
         builder: (ctx, snap) {
@@ -123,7 +166,18 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 future: _loadSet(r),
                 builder: (ctx, setSnap) {
                   final setName = setSnap.data?.name ?? r.setCode.toUpperCase();
-                  return Text('$setName (${r.setCode.toUpperCase()}) · ${r.collectorNumber}');
+                  return Row(
+                    children: [
+                      SetIcon(code: r.setCode, size: 20),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '$setName (${r.setCode.toUpperCase()}) · ${r.collectorNumber}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  );
                 },
               ),
               const SizedBox(height: 8),

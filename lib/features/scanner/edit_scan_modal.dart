@@ -216,10 +216,30 @@ class _EditScanModalState extends State<EditScanModal> {
                           const Icon(Icons.style, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              'Printings of "$_pickedName"',
-                              style: Theme.of(context).textTheme.labelMedium,
-                              overflow: TextOverflow.ellipsis,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Printings of "$_pickedName"',
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (_card.name == _pickedName)
+                                  Text(
+                                    'Current: ${_card.setName} (${_card.set.toUpperCase()}) · ${_card.collectorNumber}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
                             ),
                           ),
                         ],
@@ -230,6 +250,8 @@ class _EditScanModalState extends State<EditScanModal> {
                         key: ValueKey(_pickedName),
                         name: _pickedName!,
                         scry: widget.scry,
+                        selectedId:
+                            _card.name == _pickedName ? _card.id : null,
                         onPick: _onPrintingPicked,
                       ),
                     ),

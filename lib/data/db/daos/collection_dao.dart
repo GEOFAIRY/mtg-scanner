@@ -21,6 +21,7 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
     required double? priceUsd,
     required double? priceUsdFoil,
     required DateTime addedAt,
+    String? imageSmall,
   }) async {
     final foilInt = foil ? 1 : 0;
     final existing = await (select(collection)
@@ -44,6 +45,7 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
         priceUsdFoil: Value(priceUsdFoil),
         priceUpdatedAt: Value(addedAt),
         rarity: Value(rarity),
+        imageSmall: Value(imageSmall),
       ));
       return (id: id, wasInsertion: true);
     }
@@ -54,6 +56,7 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
         priceUsdFoil: Value(priceUsdFoil),
         priceUpdatedAt: Value(addedAt),
         rarity: Value(rarity ?? existing.rarity),
+        imageSmall: Value(imageSmall ?? existing.imageSmall),
       ),
     );
     return (id: existing.id, wasInsertion: false);

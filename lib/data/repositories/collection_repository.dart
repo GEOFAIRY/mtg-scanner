@@ -28,6 +28,7 @@ class CollectionRepository {
         priceUsd: c.prices.usd,
         priceUsdFoil: c.prices.usdFoil,
         addedAt: DateTime.now(),
+        imageSmall: c.imageUriSmall,
       );
 
   Future<void> undoAdd({required int id, required bool wasInsertion}) async {
@@ -68,6 +69,7 @@ class CollectionRepository {
           priceUsdFoil: Value(card.prices.usdFoil),
           priceUpdatedAt: Value(DateTime.now()),
           rarity: Value(card.rarity ?? target.rarity),
+          imageSmall: Value(card.imageUriSmall ?? target.imageSmall),
         ),
       );
       await (_db.delete(_db.collection)..where((t) => t.id.equals(id))).go();
@@ -85,6 +87,7 @@ class CollectionRepository {
         priceUsd: Value(card.prices.usd),
         priceUsdFoil: Value(card.prices.usdFoil),
         priceUpdatedAt: Value(DateTime.now()),
+        imageSmall: Value(card.imageUriSmall),
       ),
     );
   }
@@ -110,6 +113,7 @@ class CollectionRepository {
             priceUsdFoil: Value(card.prices.usdFoil),
             priceUpdatedAt: Value(DateTime.now()),
             rarity: Value(card.rarity ?? row.rarity),
+            imageSmall: Value(card.imageUriSmall ?? row.imageSmall),
           ),
         );
       } on ScryfallException {
@@ -132,6 +136,7 @@ class CollectionRepository {
         priceUsdFoil: Value(card.prices.usdFoil),
         priceUpdatedAt: Value(DateTime.now()),
         rarity: Value(card.rarity ?? row.rarity),
+        imageSmall: Value(card.imageUriSmall ?? row.imageSmall),
       ),
     );
   }

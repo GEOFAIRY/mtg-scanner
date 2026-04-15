@@ -14,7 +14,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -23,6 +23,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await customStatement('DROP TABLE IF EXISTS scans');
             await m.addColumn(collection, collection.rarity);
+          }
+          if (from < 3) {
+            await m.addColumn(collection, collection.imageSmall);
           }
         },
       );
