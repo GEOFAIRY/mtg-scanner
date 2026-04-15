@@ -7,20 +7,13 @@ import 'package:mtg_scanner/features/scanner/scan_matcher.dart';
 
 class _FakeScry extends Mock implements ScryfallClient {}
 
-ScryfallCard _card({
-  String id = 'sid-1',
-  String name = 'Lightning Bolt',
-  String set = '2xm',
-  String collector = '137',
-  double? usd = 1.80,
-  double? usdFoil,
-}) =>
-    ScryfallCard(
-      id: id,
-      name: name,
-      set: set,
-      collectorNumber: collector,
-      prices: ScryfallPrices(usd: usd, usdFoil: usdFoil),
+ScryfallCard _card() => ScryfallCard(
+      id: 'sid-1',
+      name: 'Lightning Bolt',
+      set: '2xm',
+      collectorNumber: '137',
+      rarity: 'uncommon',
+      prices: ScryfallPrices(usd: 1.80),
     );
 
 void main() {
@@ -32,73 +25,61 @@ void main() {
     matcher = ScanMatcher(scry: scry);
   });
 
-  test('exact set+collector match returns confidence 1.0', () async {
+  test('exact set+collector match returns the card', () async {
     when(() => scry.cardBySetAndNumber('2XM', '137'))
         .thenAnswer((_) async => _card());
-
-    final result = await matcher.match(ParsedOcr.from(
-        rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
-
-    expect(result, isNotNull);
-    expect(result!.confidence, 1.0);
-    expect(result.card.name, 'Lightning Bolt');
+    final r = await matcher.match(
+        ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
+    expect(r, isNotNull);
+    expect(r!.name, 'Lightning Bolt');
   });
 
-  test('fuzzy fallback when exact 404s returns confidence 0.6', () async {
+  test('fuzzy fallback when exact 404s', () async {
     when(() => scry.cardBySetAndNumber('2XM', '999'))
         .thenThrow(ScryfallNotFound('2xm/999'));
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenAnswer((_) async => _card());
-
-    final result = await matcher.match(ParsedOcr.from(
-        rawName: 'Lightning Bolt', rawSetCollector: '2xm 999'));
-
-    expect(result!.confidence, 0.6);
+    final r = await matcher.match(
+        ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 999'));
+    expect(r, isNotNull);
   });
 
   test('fuzzy-only search when no set+collector present', () async {
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenAnswer((_) async => _card());
-
-    final result = await matcher
+    final r = await matcher
         .match(ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: ''));
-
-    expect(result!.confidence, 0.6);
+    expect(r, isNotNull);
   });
 
-  test('returns null when fuzzy 404s (no match found)', () async {
+  test('returns null when fuzzy 404s', () async {
     when(() => scry.cardByFuzzyName('Gibberish'))
         .thenThrow(ScryfallNotFound('fuzzy'));
-
-    final result = await matcher
+    final r = await matcher
         .match(ParsedOcr.from(rawName: 'Gibberish', rawSetCollector: ''));
-
-    expect(result, isNull);
+    expect(r, isNull);
   });
 
-  test('returns null when parsed name is empty and no set+collector', () async {
-    final result =
-        await matcher.match(ParsedOcr.from(rawName: '', rawSetCollector: ''));
-
-    expect(result, isNull);
+  test('returns null when name empty and no set+collector', () async {
+    final r = await matcher
+        .match(ParsedOcr.from(rawName: '', rawSetCollector: ''));
+    expect(r, isNull);
     verifyNever(() => scry.cardByFuzzyName(any()));
   });
 
-  test('rethrows ScryfallException from exact lookup (network error)', () async {
+  test('rethrows ScryfallException from exact lookup', () async {
     when(() => scry.cardBySetAndNumber('2XM', '137'))
         .thenThrow(ScryfallException('network down'));
-
     expect(
-      () => matcher.match(
-          ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '2xm 137')),
+      () => matcher.match(ParsedOcr.from(
+          rawName: 'Lightning Bolt', rawSetCollector: '2xm 137')),
       throwsA(isA<ScryfallException>()),
     );
   });
 
-  test('rethrows ScryfallException from fuzzy lookup (network error)', () async {
+  test('rethrows ScryfallException from fuzzy lookup', () async {
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenThrow(ScryfallException('network down'));
-
     expect(
       () => matcher
           .match(ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '')),
