@@ -53,8 +53,6 @@ void main() {
     matcher = _FakeMatcher();
     scry = _FakeScry();
     collection = CollectionRepository(db, scry);
-    registerFallbackValue(
-        const OcrRegion(left: 0, top: 0, width: 1, height: 1));
     registerFallbackValue(Uint8List(0));
     registerFallbackValue(
         ParsedOcr.from(rawName: '', rawSetCollector: ''));
@@ -72,10 +70,14 @@ void main() {
       );
 
   void stubOcr({String name = 'Lightning Bolt', String setCol = '2xm 137'}) {
-    when(() => ocr.recognizeRegion(any(), any())).thenAnswer((inv) async {
-      final region = inv.positionalArguments[1] as OcrRegion;
-      return region.top < 0.5 ? name : setCol;
-    });
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          if (name.isNotEmpty)
+            OcrBlock(
+                text: name, left: 0.05, top: 0.05, width: 0.85, height: 0.08),
+          if (setCol.isNotEmpty)
+            OcrBlock(
+                text: setCol, left: 0.05, top: 0.88, width: 0.45, height: 0.05),
+        ]);
   }
 
   test('matched outcome adds to collection and returns id + price', () async {

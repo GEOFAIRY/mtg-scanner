@@ -60,17 +60,22 @@ class ScanPipeline {
   final CollectionRepository collection;
   final Duration matchTimeout;
 
-  static const _nameRegion =
-      OcrRegion(left: 0.02, top: 0.02, width: 0.96, height: 0.14);
-  static const _setRegion =
-      OcrRegion(left: 0.02, top: 0.86, width: 0.60, height: 0.12);
+  // Vertical bands where we expect each field. Anything lands in `_nameBand`
+  // could be the card name; the winner is the widest block there. Blocks in
+  // `_setBand` are concatenated for collector-number / set-code parsing.
+  // These are intentionally wider than the old fixed crops — borderless,
+  // showcase, and retro frames don't line up with a single fixed rectangle.
+  static const double _nameBandBottom = 0.30;
+  static const double _setBandTop = 0.78;
+  static const double _setBandLeftMax = 0.75;
 
   Future<CaptureResult> captureFromWarpedCrop(
     Uint8List uprightPng, {
     bool forceFoil = false,
   }) async {
-    final rawName = await ocr.recognizeRegion(uprightPng, _nameRegion);
-    final rawSet = await ocr.recognizeRegion(uprightPng, _setRegion);
+    final blocks = await ocr.recognizeBlocks(uprightPng);
+    final rawName = _pickName(blocks);
+    final rawSet = _pickSetCollector(blocks);
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
 
     final ScryfallCard? card;
@@ -104,6 +109,31 @@ class ScanPipeline {
       foil: foil,
       wasInsertion: result.wasInsertion,
     );
+  }
+
+  static final _hasLetter = RegExp(r'[A-Za-z]');
+
+  static String _pickName(List<OcrBlock> blocks) {
+    final candidates = blocks
+        .where((b) =>
+            b.top < _nameBandBottom &&
+            _hasLetter.hasMatch(b.text) &&
+            b.text.trim().length >= 3)
+        .toList()
+      ..sort((a, b) => b.width.compareTo(a.width));
+    if (candidates.isEmpty) return '';
+    // Use the widest top-band block's first line — subsequent lines in the
+    // same block tend to be mana cost or type-line spillover on compact
+    // frames, which poisons the fuzzy-name lookup.
+    return candidates.first.text.split('\n').first;
+  }
+
+  static String _pickSetCollector(List<OcrBlock> blocks) {
+    final band = blocks
+        .where((b) => b.top >= _setBandTop && b.left < _setBandLeftMax)
+        .toList()
+      ..sort((a, b) => a.left.compareTo(b.left));
+    return band.map((b) => b.text.replaceAll('\n', ' ')).join(' ');
   }
 
   static double? _selectPrice(ScryfallCard card, bool foil) {
