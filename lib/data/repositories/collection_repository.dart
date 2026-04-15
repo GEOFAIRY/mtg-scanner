@@ -10,7 +10,7 @@ class CollectionRepository {
 
   AppDatabase get db => _db;
 
-  Future<void> addFromScryfall(
+  Future<({int id, bool wasInsertion})> addFromScryfall(
     ScryfallCard c, {
     bool foil = false,
     String condition = 'NM',
@@ -21,6 +21,7 @@ class CollectionRepository {
         name: c.name,
         setCode: c.set,
         collectorNumber: c.collectorNumber,
+        rarity: c.rarity,
         foil: foil,
         condition: condition,
         language: language,
@@ -28,6 +29,65 @@ class CollectionRepository {
         priceUsdFoil: c.prices.usdFoil,
         addedAt: DateTime.now(),
       );
+
+  Future<void> undoAdd({required int id, required bool wasInsertion}) async {
+    if (wasInsertion) {
+      await (_db.delete(_db.collection)..where((t) => t.id.equals(id))).go();
+      return;
+    }
+    final row = await (_db.select(_db.collection)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return;
+    if (row.count <= 1) {
+      await (_db.delete(_db.collection)..where((t) => t.id.equals(id))).go();
+    } else {
+      await (_db.update(_db.collection)..whereSamePrimaryKey(row))
+          .write(CollectionCompanion(count: Value(row.count - 1)));
+    }
+  }
+
+  Future<void> updateMatch({
+    required int id,
+    required ScryfallCard card,
+    required bool foil,
+    required int count,
+  }) async {
+    final foilInt = foil ? 1 : 0;
+    final target = await (_db.select(_db.collection)
+          ..where((t) =>
+              t.scryfallId.equals(card.id) &
+              t.foil.equals(foilInt) &
+              t.id.equals(id).not()))
+        .getSingleOrNull();
+    if (target != null) {
+      await (_db.update(_db.collection)..whereSamePrimaryKey(target)).write(
+        CollectionCompanion(
+          count: Value(target.count + count),
+          priceUsd: Value(card.prices.usd),
+          priceUsdFoil: Value(card.prices.usdFoil),
+          priceUpdatedAt: Value(DateTime.now()),
+          rarity: Value(card.rarity ?? target.rarity),
+        ),
+      );
+      await (_db.delete(_db.collection)..where((t) => t.id.equals(id))).go();
+      return;
+    }
+    await (_db.update(_db.collection)..where((t) => t.id.equals(id))).write(
+      CollectionCompanion(
+        scryfallId: Value(card.id),
+        name: Value(card.name),
+        setCode: Value(card.set),
+        collectorNumber: Value(card.collectorNumber),
+        rarity: Value(card.rarity),
+        foil: Value(foilInt),
+        count: Value(count),
+        priceUsd: Value(card.prices.usd),
+        priceUsdFoil: Value(card.prices.usdFoil),
+        priceUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
   Stream<List<CollectionData>> watchAll() =>
       _db.select(_db.collection).watch();
@@ -49,10 +109,11 @@ class CollectionRepository {
             priceUsd: Value(card.prices.usd),
             priceUsdFoil: Value(card.prices.usdFoil),
             priceUpdatedAt: Value(DateTime.now()),
+            rarity: Value(card.rarity ?? row.rarity),
           ),
         );
       } on ScryfallException {
-        // skip this row; continue
+        // skip
       }
       done++;
       onProgress?.call(done, rows.length);
@@ -70,6 +131,7 @@ class CollectionRepository {
         priceUsd: Value(card.prices.usd),
         priceUsdFoil: Value(card.prices.usdFoil),
         priceUpdatedAt: Value(DateTime.now()),
+        rarity: Value(card.rarity ?? row.rarity),
       ),
     );
   }

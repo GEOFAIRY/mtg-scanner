@@ -9,11 +9,12 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
     with _$CollectionDaoMixin {
   CollectionDao(super.db);
 
-  Future<void> upsertMerging({
+  Future<({int id, bool wasInsertion})> upsertMerging({
     required String scryfallId,
     required String name,
     required String setCode,
     required String collectorNumber,
+    required String? rarity,
     required bool foil,
     required String condition,
     required String language,
@@ -30,7 +31,7 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
               t.language.equals(language)))
         .getSingleOrNull();
     if (existing == null) {
-      await into(collection).insert(CollectionCompanion.insert(
+      final id = await into(collection).insert(CollectionCompanion.insert(
         scryfallId: scryfallId,
         name: name,
         setCode: setCode,
@@ -42,16 +43,19 @@ class CollectionDao extends DatabaseAccessor<AppDatabase>
         priceUsd: Value(priceUsd),
         priceUsdFoil: Value(priceUsdFoil),
         priceUpdatedAt: Value(addedAt),
+        rarity: Value(rarity),
       ));
-    } else {
-      await (update(collection)..whereSamePrimaryKey(existing)).write(
-        CollectionCompanion(
-          count: Value(existing.count + 1),
-          priceUsd: Value(priceUsd),
-          priceUsdFoil: Value(priceUsdFoil),
-          priceUpdatedAt: Value(addedAt),
-        ),
-      );
+      return (id: id, wasInsertion: true);
     }
+    await (update(collection)..whereSamePrimaryKey(existing)).write(
+      CollectionCompanion(
+        count: Value(existing.count + 1),
+        priceUsd: Value(priceUsd),
+        priceUsdFoil: Value(priceUsdFoil),
+        priceUpdatedAt: Value(addedAt),
+        rarity: Value(rarity ?? existing.rarity),
+      ),
+    );
+    return (id: existing.id, wasInsertion: false);
   }
 }
