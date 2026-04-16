@@ -132,7 +132,7 @@ void _paintWordmark(img.Image canvas, int w, int h) {
       letterH: 120, stroke: 18, rgb: (255, 220, 120));
   _drawBlockText(canvas, 'SCANNER', titleLeft, titleTop + 140,
       letterH: 70, stroke: 10, rgb: (235, 235, 245));
-  final tagline = 'Camera · Collection · Moxfield';
+  final tagline = 'Camera · Collection · Export';
   img.drawString(canvas, tagline,
       font: img.arial24,
       x: titleLeft,
