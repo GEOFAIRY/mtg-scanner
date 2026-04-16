@@ -191,6 +191,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               await Share.shareXFiles([XFile(f.path)]);
             },
           ),
+          const Divider(),
+          SwitchListTile(
+            title: const Text('Show scanner debug overlay'),
+            subtitle: const Text(
+                'Displays raw OCR text and block positions on failed scans'),
+            secondary: const Icon(Icons.bug_report),
+            value: widget.settings.debugOverlayEnabled,
+            onChanged: (v) => widget.settings.setDebugOverlayEnabled(v),
+          ),
         ],
       ),
     );

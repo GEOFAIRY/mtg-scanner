@@ -297,21 +297,26 @@ class _ScannerBodyState extends State<_ScannerBody>
           return;
         case CaptureOutcome.noMatch:
           _state.toNoMatch();
-          final parts = <String>[
-            'N: ${res.debugOcrName ?? "(empty)"}',
-            'S: ${res.debugOcrSet ?? "(empty)"}',
-            if (res.debugBlocks != null) ...[
-              '--- blocks ---',
-              res.debugBlocks!,
-            ],
-          ];
-          _debugOcr.value = parts.join('\n');
+          if (widget.settings.debugOverlayEnabled) {
+            final parts = <String>[
+              'N: ${res.debugOcrName ?? "(empty)"}',
+              'S: ${res.debugOcrSet ?? "(empty)"}',
+              if (res.debugBlocks != null) ...[
+                '--- blocks ---',
+                res.debugBlocks!,
+              ],
+            ];
+            _debugOcr.value = parts.join('\n');
+          }
           break;
         case CaptureOutcome.offline:
           _state.toOffline();
           break;
       }
-      await Future<void>.delayed(const Duration(seconds: 3));
+      final holdFor = widget.settings.debugOverlayEnabled
+          ? const Duration(seconds: 3)
+          : const Duration(milliseconds: 700);
+      await Future<void>.delayed(holdFor);
       _debugOcr.value = null;
       _state.toSearching();
       _tracker.reset();
@@ -370,16 +375,21 @@ class _ScannerBodyState extends State<_ScannerBody>
             }
           case CaptureOutcome.noMatch:
             _state.toNoMatch();
-            final parts = <String>[
-              'N: ${res.debugOcrName ?? "(empty)"}',
-              'S: ${res.debugOcrSet ?? "(empty)"}',
-              if (res.debugBlocks != null) ...[
-                '--- blocks ---',
-                res.debugBlocks!,
-              ],
-            ];
-            _debugOcr.value = parts.join('\n');
-            await Future<void>.delayed(const Duration(seconds: 3));
+            if (widget.settings.debugOverlayEnabled) {
+              final parts = <String>[
+                'N: ${res.debugOcrName ?? "(empty)"}',
+                'S: ${res.debugOcrSet ?? "(empty)"}',
+                if (res.debugBlocks != null) ...[
+                  '--- blocks ---',
+                  res.debugBlocks!,
+                ],
+              ];
+              _debugOcr.value = parts.join('\n');
+            }
+            await Future<void>.delayed(
+                widget.settings.debugOverlayEnabled
+                    ? const Duration(seconds: 3)
+                    : const Duration(milliseconds: 700));
             _debugOcr.value = null;
             _state.toSearching();
           case CaptureOutcome.offline:
