@@ -1,4 +1,4 @@
-package com.krs19.mtgscanner.mtg_scanner
+package com.geofairy.mtgscanner
 
 import io.flutter.embedding.android.FlutterActivity
 
