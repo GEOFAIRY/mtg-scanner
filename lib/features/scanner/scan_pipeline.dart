@@ -61,7 +61,7 @@ class ScanPipeline {
     required this.ocr,
     required this.matcher,
     required this.collection,
-    this.matchTimeout = const Duration(seconds: 4),
+    this.matchTimeout = const Duration(seconds: 6),
   });
 
   final OcrRunner ocr;

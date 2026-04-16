@@ -24,6 +24,7 @@ class ScannerScreen extends StatelessWidget {
     required this.pipeline,
     required this.settings,
     required this.valuePlayer,
+    required this.clickPlayer,
     required this.collection,
     required this.scry,
     super.key,
@@ -31,6 +32,7 @@ class ScannerScreen extends StatelessWidget {
   final ScanPipeline pipeline;
   final AppSettings settings;
   final AudioPlayer valuePlayer;
+  final AudioPlayer clickPlayer;
   final CollectionRepository collection;
   final ScryfallClient scry;
 
@@ -40,6 +42,7 @@ class ScannerScreen extends StatelessWidget {
           pipeline: pipeline,
           settings: settings,
           valuePlayer: valuePlayer,
+          clickPlayer: clickPlayer,
           collection: collection,
           scry: scry,
         ),
@@ -51,12 +54,14 @@ class _ScannerBody extends StatefulWidget {
     required this.pipeline,
     required this.settings,
     required this.valuePlayer,
+    required this.clickPlayer,
     required this.collection,
     required this.scry,
   });
   final ScanPipeline pipeline;
   final AppSettings settings;
   final AudioPlayer valuePlayer;
+  final AudioPlayer clickPlayer;
   final CollectionRepository collection;
   final ScryfallClient scry;
   @override
@@ -413,12 +418,12 @@ class _ScannerBodyState extends State<_ScannerBody>
     // Haptic is the most reliable signal on Android — guaranteed regardless
     // of system volume, DND, or media routing.
     unawaited(HapticFeedback.selectionClick());
+    final player = valueAlert ? widget.valuePlayer : widget.clickPlayer;
     try {
-      await widget.valuePlayer.stop();
-      await widget.valuePlayer.setVolume(valueAlert ? 1.0 : 0.25);
-      await widget.valuePlayer.resume();
+      await player.stop();
+      await player.resume();
     } catch (e, s) {
-      _logCameraError('valuePlayer', e, s);
+      _logCameraError(valueAlert ? 'valuePlayer' : 'clickPlayer', e, s);
     }
   }
 

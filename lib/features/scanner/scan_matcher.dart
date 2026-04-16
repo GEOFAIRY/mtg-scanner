@@ -83,14 +83,22 @@ class ScanMatcher {
 
     if (fuzzy != null && candidates.isEmpty) return fuzzy;
 
-    // When fuzzy resolved the name but we have cn candidates that didn't
-    // match via the name+cn search (OCR noise on retro/showcase cn), scan
-    // all printings and pick the one whose collector number matches a
-    // candidate. This finds the specific retro/showcase/promo printing
-    // rather than Scryfall's default.
+    // If fuzzy already returned a printing whose cn matches an OCR
+    // candidate, trust it — no printings walk needed.
+    if (fuzzy != null &&
+        fuzzy.name.toLowerCase() == name.toLowerCase() &&
+        candidates.contains(fuzzy.collectorNumber.toLowerCase())) {
+      return fuzzy;
+    }
+
+    // Fuzzy resolved the name but the OCR'd cn doesn't match fuzzy's
+    // printing. Scan the first page of printings for one whose cn agrees.
+    // Bounded to one page — unbounded pagination on heavy-reprint cards
+    // (Mountain has 200+ printings) blows the match timeout.
     if (fuzzy != null && candidates.isNotEmpty) {
       try {
-        final printings = await scry.printingsOfName(fuzzy.name);
+        final printings =
+            await scry.printingsOfName(fuzzy.name, maxPages: 1);
         for (final cn in candidates) {
           final match = printings
               .where((p) => p.collectorNumber.toLowerCase() == cn)
@@ -103,8 +111,7 @@ class ScanMatcher {
       return fuzzy;
     }
 
-    // If fuzzy returned a card whose name exactly matches the OCR'd name
-    // (case-insensitive), trust it and skip the autocomplete rescue.
+    // Exact name match with no cn — fuzzy is as good as it gets.
     if (fuzzy != null &&
         fuzzy.name.toLowerCase() == name.toLowerCase()) {
       return fuzzy;

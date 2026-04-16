@@ -25,8 +25,8 @@ void main() {
     scry = _FakeScry();
     matcher = ScanMatcher(scry: scry);
     when(() => scry.autocomplete(any())).thenAnswer((_) async => <String>[]);
-    when(() => scry.printingsOfName(any()))
-        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.printingsOfName(any(),
+        maxPages: any(named: 'maxPages'))).thenAnswer((_) async => <ScryfallCard>[]);
     // Default: plst lookups 404 unless a test overrides.
     when(() => scry.cardBySetAndNumber('plst', any()))
         .thenThrow(ScryfallNotFound('plst'));
@@ -103,7 +103,8 @@ void main() {
         .thenThrow(ScryfallNotFound('dmr/381'));
     when(() => scry.cardByFuzzyName('Lightning Bolt'))
         .thenAnswer((_) async => _card(set: 'a25', cn: '141'));
-    when(() => scry.printingsOfName('Lightning Bolt')).thenAnswer(
+    when(() => scry.printingsOfName('Lightning Bolt',
+        maxPages: any(named: 'maxPages'))).thenAnswer(
         (_) async => [_card(set: 'a25', cn: '141'), _card(set: 'dmr', cn: '381')]);
 
     final r = await matcher.match(

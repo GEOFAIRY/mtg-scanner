@@ -156,10 +156,11 @@ void main() {
     expect(await db.select(db.collection).get(), isEmpty);
   });
 
-  test('offline outcome: timeout beyond 4s becomes offline', () async {
+  test('offline outcome: timeout beyond matchTimeout becomes offline',
+      () async {
     stubOcr();
     when(() => matcher.match(any())).thenAnswer((_) async {
-      await Future<void>.delayed(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 8));
       return null;
     });
 

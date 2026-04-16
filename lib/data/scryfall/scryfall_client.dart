@@ -115,11 +115,17 @@ class ScryfallClient {
     });
   }
 
-  Future<List<ScryfallCard>> printingsOfName(String name) async {
+  /// Fetch all printings of a card. [maxPages] bounds pagination — callers
+  /// on the scan-latency critical path should pass 1 to avoid the hundreds-
+  /// of-printings walk that basic lands like Mountain trigger (each page is
+  /// another throttled round-trip).
+  Future<List<ScryfallCard>> printingsOfName(String name,
+      {int maxPages = 50}) async {
     final q = Uri.encodeQueryComponent('!"$name" unique:prints');
     var uri = Uri.parse('$_base/cards/search?q=$q&order=released');
     final all = <ScryfallCard>[];
-    while (true) {
+    var pagesFetched = 0;
+    while (pagesFetched < maxPages) {
       final page = await _throttled(() async {
         final r = await _http.get(uri, headers: _headers);
         if (r.statusCode == 404) return null;
@@ -129,6 +135,7 @@ class ScryfallClient {
         return jsonDecode(r.body) as Map<String, dynamic>;
       });
       if (page == null) break;
+      pagesFetched++;
       final data = page['data'] as List?;
       if (data != null) {
         all.addAll(data.map(
