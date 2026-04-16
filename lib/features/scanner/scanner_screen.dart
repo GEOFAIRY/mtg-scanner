@@ -290,14 +290,9 @@ class _ScannerBodyState extends State<_ScannerBody>
             wasInsertion: res.wasInsertion,
           );
           _state.toSearching();
-          if (res.price != null &&
-              res.price! > widget.settings.valueAlertThreshold) {
-            unawaited(_playValueAlert());
-          } else {
-            // Cheap confirmation for low-value scans so every successful
-            // match gets audible feedback.
-            unawaited(SystemSound.play(SystemSoundType.click));
-          }
+          final isValueAlert = res.price != null &&
+              res.price! > widget.settings.valueAlertThreshold;
+          unawaited(_playScanFeedback(valueAlert: isValueAlert));
           _tracker.reset();
           return;
         case CaptureOutcome.noMatch:
@@ -374,12 +369,9 @@ class _ScannerBodyState extends State<_ScannerBody>
               wasInsertion: res.wasInsertion,
             );
             _state.toSearching();
-            if (res.price != null &&
-                res.price! > widget.settings.valueAlertThreshold) {
-              unawaited(_playValueAlert());
-            } else {
-              unawaited(SystemSound.play(SystemSoundType.click));
-            }
+            final isValueAlert = res.price != null &&
+                res.price! > widget.settings.valueAlertThreshold;
+            unawaited(_playScanFeedback(valueAlert: isValueAlert));
           case CaptureOutcome.noMatch:
             _state.toNoMatch();
             if (widget.settings.debugOverlayEnabled) {
@@ -417,9 +409,13 @@ class _ScannerBodyState extends State<_ScannerBody>
     }
   }
 
-  Future<void> _playValueAlert() async {
+  Future<void> _playScanFeedback({required bool valueAlert}) async {
+    // Haptic is the most reliable signal on Android — guaranteed regardless
+    // of system volume, DND, or media routing.
+    unawaited(HapticFeedback.selectionClick());
     try {
       await widget.valuePlayer.stop();
+      await widget.valuePlayer.setVolume(valueAlert ? 1.0 : 0.25);
       await widget.valuePlayer.resume();
     } catch (e, s) {
       _logCameraError('valuePlayer', e, s);
