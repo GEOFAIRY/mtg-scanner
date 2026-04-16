@@ -42,4 +42,4 @@ If this policy changes, the "Last updated" date above will be revised. Because n
 
 ## Contact
 
-Questions about this policy: **kstagg@overcyte.com**
+Questions about this policy: **krs19@xtra.co.nz**
