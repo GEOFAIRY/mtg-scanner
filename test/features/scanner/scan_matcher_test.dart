@@ -27,6 +27,9 @@ void main() {
     when(() => scry.autocomplete(any())).thenAnswer((_) async => <String>[]);
     when(() => scry.printingsOfName(any()))
         .thenAnswer((_) async => <ScryfallCard>[]);
+    // Default: plst lookups 404 unless a test overrides.
+    when(() => scry.cardBySetAndNumber('plst', any()))
+        .thenThrow(ScryfallNotFound('plst'));
   });
 
   test('name+cn lookup wins even when set code is present', () async {

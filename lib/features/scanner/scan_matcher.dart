@@ -36,14 +36,22 @@ class ScanMatcher {
 
     final primaryCn = parsed.collectorNumber;
     if (parsed.setCode != null && primaryCn != null) {
+      // "The List" cards use a Planeswalker symbol instead of a set icon
+      // and their Scryfall collector number is "{ORIG_SET}-{CN}" under set
+      // code "plst". The OCR reads the original set code and bare cn, so
+      // try the plst lookup first.
+      try {
+        final listCn = '${parsed.setCode!}-$primaryCn'.toLowerCase();
+        final listCard = await scry.cardBySetAndNumber('plst', listCn);
+        if (name.isEmpty || _namesSimilar(name, listCard.name)) {
+          return listCard;
+        }
+      } on ScryfallNotFound {
+        // Not a List card — try normal set+cn.
+      }
       try {
         final card =
             await scry.cardBySetAndNumber(parsed.setCode!, primaryCn);
-        // The set code from OCR is often garbage (especially on old-border
-        // and retro frames). If the returned card's name doesn't resemble
-        // the OCR'd name at all, this is a false positive (e.g. OCR reads
-        // "S99/103" → Goblin Hero when the user scanned Lavaborn Muse).
-        // Drop it and let fuzzy sort things out.
         if (name.isEmpty || _namesSimilar(name, card.name)) {
           return card;
         }
