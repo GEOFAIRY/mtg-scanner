@@ -30,7 +30,16 @@ class ScanMatcher {
     if (name.isNotEmpty) {
       for (final cn in candidates) {
         final hits = await scry.cardsByNameAndCollectorNumber(name, cn);
-        if (hits.isNotEmpty) return hits.first;
+        if (hits.isEmpty) continue;
+        // When we have a set code from OCR, prefer the printing whose set
+        // matches. Basic lands and other heavily-reprinted cards produce
+        // many name+cn hits across sets (e.g. Mountain 280 in DMU vs MOM).
+        if (parsed.setCode != null) {
+          final setMatch = hits.where(
+              (c) => c.set.toUpperCase() == parsed.setCode).toList();
+          if (setMatch.isNotEmpty) return setMatch.first;
+        }
+        return hits.first;
       }
     }
 
