@@ -42,6 +42,7 @@ class _EditScanModalState extends State<EditScanModal> {
   late ScryfallCard _card;
   late bool _foil;
   late int _count;
+  bool _dirty = false;
 
   @override
   void initState() {
@@ -96,179 +97,203 @@ class _EditScanModalState extends State<EditScanModal> {
 
   void _onPrintingPicked(ScryfallCard c) {
     setState(() => _card = c);
+    _autoSave();
   }
 
-  Future<void> _save() async {
+  void _setFoil(bool v) {
+    setState(() => _foil = v);
+    _autoSave();
+  }
+
+  void _incrementCount() {
+    setState(() => _count += 1);
+    _autoSave();
+  }
+
+  void _decrementCount() {
+    if (_count <= 1) return;
+    setState(() => _count -= 1);
+    _autoSave();
+  }
+
+  Future<void> _autoSave() async {
+    _dirty = true;
     await widget.collection.updateMatch(
       id: widget.collectionId,
       card: _card,
       foil: _foil,
       count: _count,
     );
-    if (!mounted) return;
-    Navigator.of(context).pop(
-      EditScanResult(card: _card, foil: _foil, count: _count),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit scan'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        Navigator.of(context).pop(
+          _dirty
+              ? EditScanResult(card: _card, foil: _foil, count: _count)
+              : null,
+        );
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Edit scan'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(
+              _dirty
+                  ? EditScanResult(card: _card, foil: _foil, count: _count)
+                  : null,
+            ),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _ctrl,
-                decoration: InputDecoration(
-                  labelText: 'Card name',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _loadingSuggestions
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2)),
-                        )
-                      : (_ctrl.text.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                _ctrl.clear();
-                                _onChanged('');
-                              },
-                            )),
+        ),
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _ctrl,
+                  decoration: InputDecoration(
+                    labelText: 'Card name',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _loadingSuggestions
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)),
+                          )
+                        : (_ctrl.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  _ctrl.clear();
+                                  _onChanged('');
+                                },
+                              )),
+                  ),
+                  onChanged: _onChanged,
                 ),
-                onChanged: _onChanged,
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  FilterChip(
-                    avatar: Icon(Icons.auto_awesome,
-                        size: 16, color: _foil ? Colors.black : null),
-                    label: const Text('Foil'),
-                    selected: _foil,
-                    onSelected: (v) => setState(() => _foil = v),
-                    selectedColor: const Color(0xFFECC460),
-                    showCheckmark: false,
-                  ),
-                  const Spacer(),
-                  const Text('Qty'),
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: _count > 1
-                        ? () => setState(() => _count -= 1)
-                        : null,
-                  ),
-                  SizedBox(
-                      width: 24,
-                      child: Text('$_count',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600))),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline),
-                    onPressed: () => setState(() => _count += 1),
-                  ),
-                ],
-              ),
-            ),
-            if (_suggestions.isNotEmpty && _pickedName == null)
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _suggestions.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) => ListTile(
-                    title: Text(_suggestions[i]),
-                    onTap: () => _pickName(_suggestions[i]),
-                  ),
-                ),
-              )
-            else if (_pickedName != null)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
                   children: [
-                    Container(
-                      color:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.style, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Printings of "$_pickedName"',
-                                  style:
-                                      Theme.of(context).textTheme.labelMedium,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (_card.name == _pickedName)
-                                  Text(
-                                    'Current: ${_card.setName} (${_card.set.toUpperCase()}) · ${_card.collectorNumber}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    FilterChip(
+                      avatar: Icon(Icons.auto_awesome,
+                          size: 16, color: _foil ? Colors.black : null),
+                      label: const Text('Foil'),
+                      selected: _foil,
+                      onSelected: _setFoil,
+                      selectedColor: const Color(0xFFECC460),
+                      showCheckmark: false,
                     ),
-                    Expanded(
-                      child: PrintingPicker(
-                        key: ValueKey(_pickedName),
-                        name: _pickedName!,
-                        scry: widget.scry,
-                        selectedId:
-                            _card.name == _pickedName ? _card.id : null,
-                        onPick: _onPrintingPicked,
-                      ),
+                    const Spacer(),
+                    const Text('Qty'),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: _count > 1 ? _decrementCount : null,
+                    ),
+                    SizedBox(
+                        width: 24,
+                        child: Text('$_count',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600))),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: _incrementCount,
                     ),
                   ],
                 ),
-              )
-            else
-              const Expanded(
-                child: Center(
-                  child: Text('Type at least 2 letters',
-                      style: TextStyle(color: Colors.grey)),
-                ),
               ),
-          ],
+              if (_suggestions.isNotEmpty && _pickedName == null)
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: _suggestions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) => ListTile(
+                      title: Text(_suggestions[i]),
+                      onTap: () => _pickName(_suggestions[i]),
+                    ),
+                  ),
+                )
+              else if (_pickedName != null)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerHighest,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.style, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Printings of "$_pickedName"',
+                                    style:
+                                        Theme.of(context).textTheme.labelMedium,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (_card.name == _pickedName)
+                                    Text(
+                                      'Current: ${_card.setName} (${_card.set.toUpperCase()}) · ${_card.collectorNumber}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: PrintingPicker(
+                          key: ValueKey(_pickedName),
+                          name: _pickedName!,
+                          scry: widget.scry,
+                          selectedId:
+                              _card.name == _pickedName ? _card.id : null,
+                          onPick: _onPrintingPicked,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const Expanded(
+                  child: Center(
+                    child: Text('Type at least 2 letters',
+                        style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
