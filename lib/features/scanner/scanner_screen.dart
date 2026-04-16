@@ -297,10 +297,15 @@ class _ScannerBodyState extends State<_ScannerBody>
           return;
         case CaptureOutcome.noMatch:
           _state.toNoMatch();
-          if (res.debugOcrName != null || res.debugOcrSet != null) {
-            _debugOcr.value =
-                'N: ${res.debugOcrName ?? ""}\nS: ${res.debugOcrSet ?? ""}';
-          }
+          final parts = <String>[
+            'N: ${res.debugOcrName ?? "(empty)"}',
+            'S: ${res.debugOcrSet ?? "(empty)"}',
+            if (res.debugBlocks != null) ...[
+              '--- blocks ---',
+              res.debugBlocks!,
+            ],
+          ];
+          _debugOcr.value = parts.join('\n');
           break;
         case CaptureOutcome.offline:
           _state.toOffline();
@@ -313,6 +318,85 @@ class _ScannerBodyState extends State<_ScannerBody>
     } finally {
       bgr?.dispose();
       _busy = false;
+    }
+  }
+
+  Future<void> _forceScan() async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized || _busy) return;
+    _busy = true;
+    try {
+      // Pause the live stream so the camera can take a still photo.
+      if (_streamActive) {
+        try {
+          await c.stopImageStream();
+        } catch (_) {}
+        _streamActive = false;
+      }
+      _state.toCapturing();
+      final file = await c.takePicture();
+      final bytes = await file.readAsBytes();
+      // Try rect detection + warp; fall back to the raw photo if no quad.
+      final bgr = cv.imdecode(bytes, cv.IMREAD_COLOR);
+      try {
+        final rect = detectCardRectOnMat(bgr);
+        final Uint8List upright;
+        if (rect != null) {
+          upright = warpToUprightOnMat(bgr, quad: rect.quad);
+        } else {
+          final (_, png) = cv.imencode('.png', bgr);
+          upright = png;
+        }
+        _state.toMatching();
+        final res = await widget.pipeline
+            .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
+        _lastCaptureAt = DateTime.now();
+        if (!mounted) return;
+        switch (res.outcome) {
+          case CaptureOutcome.matched:
+            _lastMatchedCardId = res.card!.id;
+            _lastMatchedAt = DateTime.now();
+            _banner.value = BannerData(
+              collectionId: res.collectionId!,
+              card: res.card!,
+              price: res.price,
+              foil: res.foil,
+              wasInsertion: res.wasInsertion,
+            );
+            _state.toSearching();
+            if (res.price != null &&
+                res.price! > widget.settings.valueAlertThreshold) {
+              unawaited(_playValueAlert());
+            }
+          case CaptureOutcome.noMatch:
+            _state.toNoMatch();
+            final parts = <String>[
+              'N: ${res.debugOcrName ?? "(empty)"}',
+              'S: ${res.debugOcrSet ?? "(empty)"}',
+              if (res.debugBlocks != null) ...[
+                '--- blocks ---',
+                res.debugBlocks!,
+              ],
+            ];
+            _debugOcr.value = parts.join('\n');
+            await Future<void>.delayed(const Duration(seconds: 3));
+            _debugOcr.value = null;
+            _state.toSearching();
+          case CaptureOutcome.offline:
+            _state.toOffline();
+            await Future<void>.delayed(const Duration(seconds: 2));
+            _state.toSearching();
+        }
+      } finally {
+        bgr.dispose();
+      }
+    } catch (e, s) {
+      _logCameraError('forceScan', e, s);
+      _state.toSearching();
+    } finally {
+      _busy = false;
+      _emptyStreak = _emptyFramesToReArm;
+      await _resumeStreamIfNotPaused();
     }
   }
 
@@ -454,9 +538,12 @@ class _ScannerBodyState extends State<_ScannerBody>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          (c == null || !c.value.isInitialized)
-              ? const ColoredBox(color: Colors.black)
-              : CameraPreview(c),
+          GestureDetector(
+            onTap: _forceScan,
+            child: (c == null || !c.value.isInitialized)
+                ? const ColoredBox(color: Colors.black)
+                : CameraPreview(c),
+          ),
           ValueListenableBuilder<ScannerState>(
             valueListenable: _state,
             builder: (_, s, __) => _Overlay(state: s),

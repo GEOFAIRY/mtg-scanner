@@ -20,9 +20,10 @@ class CaptureResult {
     required this.wasInsertion,
   })  : outcome = CaptureOutcome.matched,
         debugOcrName = null,
-        debugOcrSet = null;
+        debugOcrSet = null,
+        debugBlocks = null;
 
-  CaptureResult.noMatch({this.debugOcrName, this.debugOcrSet})
+  CaptureResult.noMatch({this.debugOcrName, this.debugOcrSet, this.debugBlocks})
       : outcome = CaptureOutcome.noMatch,
         collectionId = null,
         card = null,
@@ -38,7 +39,8 @@ class CaptureResult {
         foil = false,
         wasInsertion = false,
         debugOcrName = null,
-        debugOcrSet = null;
+        debugOcrSet = null,
+        debugBlocks = null;
 
   final CaptureOutcome outcome;
   final int? collectionId;
@@ -48,6 +50,7 @@ class CaptureResult {
   final bool wasInsertion;
   final String? debugOcrName;
   final String? debugOcrSet;
+  final String? debugBlocks;
 }
 
 class ScanPipeline {
@@ -68,8 +71,10 @@ class ScanPipeline {
   // `_setBand` are concatenated for collector-number / set-code parsing.
   // These are intentionally wider than the old fixed crops — borderless,
   // showcase, and retro frames don't line up with a single fixed rectangle.
-  static const double _nameBandBottom = 0.30;
-  static const double _setBandTop = 0.78;
+  // Widened from 0.30/0.78 — retro frames push the name banner lower (thick
+  // top border) and the collector line higher; borderless cards vary too.
+  static const double _nameBandBottom = 0.20;
+  static const double _setBandTop = 0.70;
   static const double _setBandLeftMax = 0.75;
 
   Future<CaptureResult> captureFromWarpedCrop(
@@ -91,8 +96,15 @@ class ScanPipeline {
     }
 
     if (card == null) {
+      final debugBlockDump = blocks
+          .map((b) =>
+              'y:${b.top.toStringAsFixed(2)} x:${b.left.toStringAsFixed(2)} '
+              'w:${b.width.toStringAsFixed(2)} "${b.text.replaceAll('\n', ' ').substring(0, b.text.length.clamp(0, 30))}"')
+          .join('\n');
       return CaptureResult.noMatch(
-          debugOcrName: rawName, debugOcrSet: rawSet);
+          debugOcrName: rawName,
+          debugOcrSet: rawSet,
+          debugBlocks: debugBlockDump);
     }
 
     var foil = forceFoil;

@@ -94,11 +94,11 @@ class MlKitOcrRunner implements OcrRunner {
   /// doesn't disagree with the pipeline's picker.
   static bool _hasConfidentNameAndCn(List<OcrBlock> blocks) {
     final hasName = blocks.any((b) =>
-        b.top < 0.30 &&
+        b.top < 0.20 &&
         _confidentLetter.hasMatch(b.text) &&
         b.text.trim().length >= 3);
     final hasCn = blocks.any((b) =>
-        b.top >= 0.78 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
+        b.top >= 0.70 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
     return hasName && hasCn;
   }
 
