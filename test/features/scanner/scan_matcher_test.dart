@@ -24,9 +24,9 @@ void main() {
   setUp(() {
     scry = _FakeScry();
     matcher = ScanMatcher(scry: scry);
-    // Default: autocomplete returns nothing, so the rescue path is a no-op
-    // unless a test overrides it.
     when(() => scry.autocomplete(any())).thenAnswer((_) async => <String>[]);
+    when(() => scry.printingsOfName(any()))
+        .thenAnswer((_) async => <ScryfallCard>[]);
   });
 
   test('name+cn lookup wins even when set code is present', () async {
@@ -87,6 +87,27 @@ void main() {
     final r = await matcher
         .match(ParsedOcr.from(rawName: 'Gibberish', rawSetCollector: ''));
     expect(r, isNull);
+  });
+
+  test('fuzzy + cn candidates resolves correct printing via printingsOfName',
+      () async {
+    // Name+cn search returns empty (OCR noise on retro cn), but fuzzy
+    // resolves the name. printingsOfName finds the retro printing whose cn
+    // matches the OCR candidate.
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '381'))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardBySetAndNumber('DMR', '381'))
+        .thenThrow(ScryfallNotFound('dmr/381'));
+    when(() => scry.cardByFuzzyName('Lightning Bolt'))
+        .thenAnswer((_) async => _card(set: 'a25', cn: '141'));
+    when(() => scry.printingsOfName('Lightning Bolt')).thenAnswer(
+        (_) async => [_card(set: 'a25', cn: '141'), _card(set: 'dmr', cn: '381')]);
+
+    final r = await matcher.match(
+        ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: 'DMR 381'));
+    expect(r, isNotNull);
+    expect(r!.set, 'dmr');
+    expect(r.collectorNumber, '381');
   });
 
   test('autocomplete rescue recovers when OCR name is close but wrong', () async {
