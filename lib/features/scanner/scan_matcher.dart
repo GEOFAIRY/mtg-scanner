@@ -23,7 +23,7 @@ class ScanMatcher {
   ///
   /// Returns `null` when every lookup comes up empty. Throws [ScryfallException]
   /// on network/API errors so callers can treat them as "offline".
-  Future<ScryfallCard?> match(ParsedOcr parsed) async {
+  Future<ScryfallCard?> match(ParsedOcr parsed, {bool isListCard = false}) async {
     final name = parsed.name;
     final candidates = parsed.collectorNumberCandidates;
 
@@ -36,18 +36,19 @@ class ScanMatcher {
 
     final primaryCn = parsed.collectorNumber;
     if (parsed.setCode != null && primaryCn != null) {
-      // "The List" cards use a Planeswalker symbol instead of a set icon
-      // and their Scryfall collector number is "{ORIG_SET}-{CN}" under set
-      // code "plst". The OCR reads the original set code and bare cn, so
-      // try the plst lookup first.
-      try {
-        final listCn = '${parsed.setCode!}-$primaryCn'.toLowerCase();
-        final listCard = await scry.cardBySetAndNumber('plst', listCn);
-        if (name.isEmpty || _namesSimilar(name, listCard.name)) {
-          return listCard;
+      // If the caller detected the Planeswalker List icon in the set-symbol
+      // area, try the plst set first. List cards use "{ORIG_SET}-{CN}" as
+      // their collector number under set code "plst".
+      if (isListCard) {
+        try {
+          final listCn = '${parsed.setCode!}-$primaryCn'.toLowerCase();
+          final listCard = await scry.cardBySetAndNumber('plst', listCn);
+          if (name.isEmpty || _namesSimilar(name, listCard.name)) {
+            return listCard;
+          }
+        } on ScryfallNotFound {
+          // Not on The List — fall through to normal set+cn.
         }
-      } on ScryfallNotFound {
-        // Not a List card — try normal set+cn.
       }
       try {
         final card =

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
@@ -104,10 +105,13 @@ class ScanPipeline {
       }
     }
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
+    final listCard = _detectListIcon(uprightPng);
 
     final ScryfallCard? card;
     try {
-      card = await matcher.match(parsed).timeout(matchTimeout);
+      card = await matcher
+          .match(parsed, isListCard: listCard)
+          .timeout(matchTimeout);
     } on TimeoutException {
       return CaptureResult.offline();
     } on ScryfallException {
@@ -150,6 +154,45 @@ class ScanPipeline {
   // MTG gameplay keywords that appear in oracle/rules text but never in card
   // names. If the "name" we picked contains one of these, the warp is almost
   // certainly upside down (rules text at the top instead of the name banner).
+  /// Check the set-symbol area (bottom-left of the warped card) for the
+  /// Planeswalker logo that indicates a "The List" card. The logo is a
+  /// solid filled icon — distinctly denser than typical set symbols which
+  /// are mostly outlines. We threshold the region and check the ratio of
+  /// dark pixels: > 30% suggests a filled symbol like the Planeswalker face.
+  static bool _detectListIcon(Uint8List uprightPng) {
+    final cv.Mat src;
+    try {
+      src = cv.imdecode(uprightPng, cv.IMREAD_GRAYSCALE);
+    } catch (_) {
+      return false;
+    }
+    try {
+      if (src.isEmpty) return false;
+      final h = src.rows;
+      final w = src.cols;
+      // The set symbol sits at roughly (3-10%, 89-96%) of the card.
+      final x = (w * 0.03).round();
+      final y = (h * 0.89).round();
+      final rw = (w * 0.07).round();
+      final rh = (h * 0.07).round();
+      if (x + rw > w || y + rh > h) return false;
+      final roi = src.region(cv.Rect(x, y, rw, rh));
+      // OTSU threshold to separate symbol from background.
+      final binary = cv.threshold(roi, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU).$2;
+      try {
+        final dark = cv.countNonZero(binary);
+        final total = rw * rh;
+        final ratio = total == 0 ? 0.0 : dark / total;
+        return ratio > 0.30;
+      } finally {
+        roi.dispose();
+        binary.dispose();
+      }
+    } finally {
+      src.dispose();
+    }
+  }
+
   static final _oracleKeywords = RegExp(
       r'\b(mana|creature|target|counter|damage|draw|discard|exile|sacrifice|'
       r'graveyard|battlefield|enchant|equip|activate|upkeep|haste|flying|'
