@@ -116,9 +116,10 @@ class ResultBanner extends StatelessWidget {
                   tooltip: 'Edit',
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
+                  icon: const Icon(Icons.delete_outline,
+                      color: Colors.white70),
                   onPressed: onDismiss,
-                  tooltip: 'Dismiss',
+                  tooltip: 'Remove',
                 ),
               ],
             ),

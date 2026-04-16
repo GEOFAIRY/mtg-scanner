@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import '../../app_settings.dart';
 import '../../data/repositories/collection_repository.dart';
@@ -292,6 +293,10 @@ class _ScannerBodyState extends State<_ScannerBody>
           if (res.price != null &&
               res.price! > widget.settings.valueAlertThreshold) {
             unawaited(_playValueAlert());
+          } else {
+            // Cheap confirmation for low-value scans so every successful
+            // match gets audible feedback.
+            unawaited(SystemSound.play(SystemSoundType.click));
           }
           _tracker.reset();
           return;
@@ -372,6 +377,8 @@ class _ScannerBodyState extends State<_ScannerBody>
             if (res.price != null &&
                 res.price! > widget.settings.valueAlertThreshold) {
               unawaited(_playValueAlert());
+            } else {
+              unawaited(SystemSound.play(SystemSoundType.click));
             }
           case CaptureOutcome.noMatch:
             _state.toNoMatch();

@@ -70,7 +70,7 @@ void main() {
     expect(edits, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('close icon triggers onDismiss', (tester) async {
+  testWidgets('delete icon triggers onDismiss', (tester) async {
     var dismisses = 0;
     await tester.pumpWidget(host(ResultBanner(
       data: BannerData(
@@ -82,7 +82,7 @@ void main() {
       onDismiss: () => dismisses++,
       onEdit: () {},
     )));
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byIcon(Icons.delete_outline));
     expect(dismisses, 1);
   });
 }
