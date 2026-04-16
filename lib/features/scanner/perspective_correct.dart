@@ -19,6 +19,23 @@ Uint8List warpToUpright(
   int targetHeight = 680,
 }) {
   final src = cv.imdecode(frameBytes, cv.IMREAD_COLOR);
+  try {
+    return warpToUprightOnMat(src,
+        quad: quad, targetWidth: targetWidth, targetHeight: targetHeight);
+  } finally {
+    src.dispose();
+  }
+}
+
+/// Warp an already-decoded BGR [src] Mat into an upright card PNG. Caller
+/// owns [src] and its lifecycle — lets the scanner skip the
+/// imencode/imdecode round-trip from the frame loop.
+Uint8List warpToUprightOnMat(
+  cv.Mat src, {
+  required CardQuad quad,
+  int targetWidth = 488,
+  int targetHeight = 680,
+}) {
   // MTG cards are portrait. If the detected quad is landscape (top edge
   // longer than left edge), rotate the corner labels 90° CW so the warp
   // output is upright in portrait regardless of how the camera saw it.
@@ -42,7 +59,13 @@ Uint8List warpToUpright(
   ]);
   final m = cv.getPerspectiveTransform2f(srcPts, dstPts);
   final out = cv.warpPerspective(src, m, (targetWidth, targetHeight));
-  final (_, png) = cv.imencode('.png', out);
-  return png;
+  try {
+    final (_, png) = cv.imencode('.png', out);
+    return png;
+  } finally {
+    srcPts.dispose();
+    dstPts.dispose();
+    m.dispose();
+    out.dispose();
+  }
 }
-

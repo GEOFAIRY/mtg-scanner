@@ -110,10 +110,19 @@ class _ScannerBodyState extends State<_ScannerBody>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _resumeStreamIfNotPaused();
-    } else {
-      _releaseCamera();
+    // `inactive` fires constantly (pulling down the status bar, system
+    // dialogs, routing transitions). Tearing down and re-initializing the
+    // camera on every one of those causes a visible black flash. Only
+    // release on the lifecycle events that actually mean "we're leaving".
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _resumeStreamIfNotPaused();
+      case AppLifecycleState.inactive:
+        _pauseStream();
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        _releaseCamera();
     }
   }
 
@@ -191,10 +200,11 @@ class _ScannerBodyState extends State<_ScannerBody>
   Future<void> _onFrame(CameraImage img) async {
     if (_busy || _state.value.paused || _externallyPaused) return;
     _busy = true;
+    cv.Mat? bgr;
     try {
-      final bytes = _bgrJpegFromFrame(img);
-      if (bytes == null) return;
-      final rect = detectCardRect(bytes);
+      bgr = _bgrMatFromFrame(img);
+      if (bgr == null) return;
+      final rect = detectCardRectOnMat(bgr);
       if (rect == null) {
         _tracker.reset();
         _state.toSearching();
@@ -210,10 +220,18 @@ class _ScannerBodyState extends State<_ScannerBody>
           _lastCaptureAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (sinceLast.inMilliseconds < 500) return;
 
+      // Duplicate-scan gate: if we just matched the same card, require the
+      // card to physically leave the frame before triggering again rather
+      // than paying the OCR + Scryfall + DB cost only to roll it back.
+      if (_lastMatchedAt != null &&
+          DateTime.now().difference(_lastMatchedAt!) < _duplicateWindow) {
+        return;
+      }
+
       if (_externallyPaused || _state.value.paused) return;
       _emptyStreak = 0;
       _state.toCapturing();
-      final upright = warpToUpright(bytes, quad: rect.quad);
+      final upright = warpToUprightOnMat(bgr, quad: rect.quad);
       _state.toMatching();
       final res = await widget.pipeline
           .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
@@ -269,6 +287,7 @@ class _ScannerBodyState extends State<_ScannerBody>
       _state.toSearching();
       _tracker.reset();
     } finally {
+      bgr?.dispose();
       _busy = false;
     }
   }
@@ -348,7 +367,7 @@ class _ScannerBodyState extends State<_ScannerBody>
     await _resumeStreamIfNotPaused();
   }
 
-  Uint8List? _bgrJpegFromFrame(CameraImage img) {
+  cv.Mat? _bgrMatFromFrame(CameraImage img) {
     if (img.format.group != ImageFormatGroup.yuv420) return null;
     final w = img.width;
     final h = img.height;
@@ -380,13 +399,14 @@ class _ScannerBodyState extends State<_ScannerBody>
       }
     }
 
-    final mat =
-        cv.Mat.fromList(h + halfH, w, cv.MatType.CV_8UC1, i420);
-    final bgr = cv.cvtColor(mat, cv.COLOR_YUV2BGR_I420);
-    final (_, jpg) = cv.imencode('.jpg', bgr);
-    mat.dispose();
-    bgr.dispose();
-    return jpg;
+    final mat = cv.Mat.fromList(h + halfH, w, cv.MatType.CV_8UC1, i420);
+    try {
+      // Keep the BGR Mat alive for the caller; the I420 source Mat is
+      // throwaway now that cvtColor has produced the BGR view.
+      return cv.cvtColor(mat, cv.COLOR_YUV2BGR_I420);
+    } finally {
+      mat.dispose();
+    }
   }
 
   @override

@@ -11,7 +11,6 @@ import 'package:mtg_card_scanner/features/scanner/ocr_runner.dart';
 import 'package:mtg_card_scanner/features/scanner/parsed_ocr.dart';
 import 'package:mtg_card_scanner/features/scanner/scan_matcher.dart';
 import 'package:mtg_card_scanner/features/scanner/scan_pipeline.dart';
-import 'package:mtg_card_scanner/features/scanner/thumbnail_storage.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 class _FakeOcr extends Mock implements OcrRunner {}
@@ -64,7 +63,6 @@ void main() {
 
   ScanPipeline pipeline() => ScanPipeline(
         ocr: ocr,
-        storage: ThumbnailStorage(),
         matcher: matcher,
         collection: collection,
       );

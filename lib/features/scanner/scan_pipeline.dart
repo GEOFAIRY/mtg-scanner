@@ -8,7 +8,6 @@ import 'foil_detector.dart';
 import 'ocr_runner.dart';
 import 'parsed_ocr.dart';
 import 'scan_matcher.dart';
-import 'thumbnail_storage.dart';
 
 enum CaptureOutcome { matched, noMatch, offline }
 
@@ -48,14 +47,12 @@ class CaptureResult {
 class ScanPipeline {
   ScanPipeline({
     required this.ocr,
-    required this.storage,
     required this.matcher,
     required this.collection,
     this.matchTimeout = const Duration(seconds: 4),
   });
 
   final OcrRunner ocr;
-  final ThumbnailStorage storage;
   final ScanMatcher matcher;
   final CollectionRepository collection;
   final Duration matchTimeout;
@@ -99,7 +96,6 @@ class ScanPipeline {
       }
     }
 
-    await storage.save(uprightPng);
     final result = await collection.addFromScryfall(card, foil: foil);
     final price = _selectPrice(card, foil);
     return CaptureResult.matched(

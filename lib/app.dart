@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'app_settings.dart';
 import 'data/db/database.dart';
@@ -15,9 +20,18 @@ import 'features/scanner/ocr_runner.dart';
 import 'features/scanner/scan_matcher.dart';
 import 'features/scanner/scan_pipeline.dart';
 import 'features/scanner/scanner_screen.dart';
-import 'features/scanner/thumbnail_storage.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/app_shell.dart';
+
+Future<void> _purgeLegacyScanThumbs() async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    final subdir = Directory(p.join(dir.path, 'scan_thumbs'));
+    if (await subdir.exists()) await subdir.delete(recursive: true);
+  } catch (_) {
+    // Best-effort — missing dir / permission issues are fine.
+  }
+}
 
 class Deps {
   Deps._(this.db, this.scry, this.collection, this.pipeline, this.settings,
@@ -35,10 +49,13 @@ class Deps {
     final collection = CollectionRepository(db, scry);
     final pipeline = ScanPipeline(
       ocr: MlKitOcrRunner(),
-      storage: ThumbnailStorage(),
       matcher: ScanMatcher(scry: scry),
       collection: collection,
     );
+    // One-time cleanup for the legacy scan_thumbs directory. Older builds
+    // wrote a PNG to this dir on every successful scan with no reader and
+    // no retention policy.
+    unawaited(_purgeLegacyScanThumbs());
     final settings = await AppSettings.load();
     final valuePlayer = AudioPlayer();
     await valuePlayer.setSource(AssetSource('sounds/cash_register.mp3'));
