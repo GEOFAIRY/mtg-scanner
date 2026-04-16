@@ -118,10 +118,23 @@ class ScanPipeline {
         .toList()
       ..sort((a, b) => b.width.compareTo(a.width));
     if (candidates.isEmpty) return '';
-    // Use the widest top-band block's first line — subsequent lines in the
-    // same block tend to be mana cost or type-line spillover on compact
-    // frames, which poisons the fuzzy-name lookup.
-    return candidates.first.text.split('\n').first;
+    final lines = candidates.first.text
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return '';
+    final first = lines.first;
+    // Only the first line's mana cost / type line spillover on compact
+    // frames poisons the fuzzy-name lookup, so we default to it. But when
+    // the first line ends in a comma (e.g. "Urza,") or is a single bare
+    // word ("Jace"), the real card name almost always continues onto the
+    // second line — join it so names like "Urza, Lord Protector" survive.
+    if (lines.length > 1 &&
+        (first.endsWith(',') || !first.contains(' '))) {
+      return '$first ${lines[1]}';
+    }
+    return first;
   }
 
   static String _pickSetCollector(List<OcrBlock> blocks) {

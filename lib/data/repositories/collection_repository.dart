@@ -148,6 +148,29 @@ class CollectionRepository {
   Future<void> delete(int id) =>
       (_db.delete(_db.collection)..where((t) => t.id.equals(id))).go();
 
+  /// Re-insert a row that was just deleted, preserving the original count.
+  /// Used by the collection detail screen's "Undo" snackbar.
+  Future<int> restore(CollectionData row) =>
+      _db.into(_db.collection).insert(
+            CollectionCompanion.insert(
+              scryfallId: row.scryfallId,
+              name: row.name,
+              setCode: row.setCode,
+              collectorNumber: row.collectorNumber,
+              rarity: Value(row.rarity),
+              foil: Value(row.foil),
+              condition: Value(row.condition),
+              language: Value(row.language),
+              count: Value(row.count),
+              priceUsd: Value(row.priceUsd),
+              priceUsdFoil: Value(row.priceUsdFoil),
+              priceUpdatedAt: Value(row.priceUpdatedAt),
+              imageSmall: Value(row.imageSmall),
+              addedAt: row.addedAt,
+              notes: Value(row.notes),
+            ),
+          );
+
   Future<void> setNotes(int id, String? notes) =>
       (_db.update(_db.collection)..where((t) => t.id.equals(id)))
           .write(CollectionCompanion(notes: Value(notes)));

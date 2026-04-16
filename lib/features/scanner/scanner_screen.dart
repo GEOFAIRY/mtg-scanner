@@ -255,6 +255,11 @@ class _ScannerBodyState extends State<_ScannerBody>
             // just performed and keep the existing banner.
             await widget.collection.undoAdd(
                 id: res.collectionId!, wasInsertion: res.wasInsertion);
+            if (_externallyPaused || _state.value.paused) {
+              _state.toSearching();
+              _tracker.reset();
+              return;
+            }
             _lastMatchedAt = now;
             _state.toSearching();
             _tracker.reset();

@@ -19,16 +19,21 @@ class _ManualAddScreenState extends State<ManualAddScreen> {
   List<String> _suggestions = const [];
   String? _pickedName;
   bool _foil = false;
+  // Monotonic id to discard out-of-order autocomplete responses — rapid
+  // keystrokes can otherwise surface stale results after newer ones.
+  int _requestSeq = 0;
 
   void _onQueryChanged(String q) {
     _debounce?.cancel();
     if (q.trim().length < 2) {
+      _requestSeq++;
       setState(() => _suggestions = const []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 200), () async {
+      final seq = ++_requestSeq;
       final list = await widget.scry.autocomplete(q);
-      if (!mounted) return;
+      if (!mounted || seq != _requestSeq) return;
       setState(() => _suggestions = list);
     });
   }

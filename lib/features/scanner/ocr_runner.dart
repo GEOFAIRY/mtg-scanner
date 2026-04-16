@@ -56,6 +56,13 @@ class MlKitOcrRunner implements OcrRunner {
     // preprocessing that can blow out translucent banners.
     results.add(await _run(imageBytes, decoded.width, decoded.height));
 
+    // Early-exit: if pass 1 already found both a plausible name block and a
+    // plausible set/cn block, the later three passes are redundant work.
+    // Standard-frame cards hit this and skip ~1-1.5s of extra OCR.
+    if (_hasConfidentNameAndCn(results.first)) {
+      return _mergeBlocks(results);
+    }
+
     // Pass 2: whole card, gentle grayscale + contrast — rescues low-contrast
     // frames (full-art, showcase, textured retro).
     final pp = img.contrast(img.grayscale(decoded), contrast: 125);
@@ -69,6 +76,24 @@ class MlKitOcrRunner implements OcrRunner {
     results.add(await _focusedPass(decoded, _setCrop));
 
     return _mergeBlocks(results);
+  }
+
+  static final _confidentLetter = RegExp(r'[A-Za-z]');
+  static final _confidentDigit = RegExp(r'\d');
+
+  /// A "confident" pass-1 result has at least one top-band block with
+  /// letters (probable name) AND at least one bottom-left block with
+  /// digits (probable collector number). Thresholds match
+  /// ScanPipeline._pickName / _pickSetCollector so the early-exit gate
+  /// doesn't disagree with the pipeline's picker.
+  static bool _hasConfidentNameAndCn(List<OcrBlock> blocks) {
+    final hasName = blocks.any((b) =>
+        b.top < 0.30 &&
+        _confidentLetter.hasMatch(b.text) &&
+        b.text.trim().length >= 3);
+    final hasCn = blocks.any((b) =>
+        b.top >= 0.78 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
+    return hasName && hasCn;
   }
 
   Future<List<OcrBlock>> _focusedPass(
@@ -133,14 +158,16 @@ class MlKitOcrRunner implements OcrRunner {
   }
 
   static List<OcrBlock> _mergeBlocks(List<List<OcrBlock>> passes) {
+    // Dedupe by (text, bucketed position). 0.03 worked as the "near enough"
+    // threshold in the O(n²) version, so bucket at 0.03 ≈ 1/33 to preserve
+    // that behavior.
+    final seen = <String>{};
     final out = <OcrBlock>[];
     for (final pass in passes) {
       for (final cand in pass) {
-        final dupe = out.any((existing) =>
-            existing.text.trim() == cand.text.trim() &&
-            (existing.left - cand.left).abs() < 0.03 &&
-            (existing.top - cand.top).abs() < 0.03);
-        if (!dupe) out.add(cand);
+        final key =
+            '${cand.text.trim()}|${(cand.left * 33).round()}|${(cand.top * 33).round()}';
+        if (seen.add(key)) out.add(cand);
       }
     }
     return out;

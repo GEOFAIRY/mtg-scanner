@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/collection_repository.dart';
@@ -23,8 +25,11 @@ class CollectionDetailScreen extends StatefulWidget {
 
 class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   late Future<CollectionData> _future = widget.repo.getById(widget.id);
+  Future<ScryfallCard?>? _cardFuture;
+  Future<ScryfallSet?>? _setFuture;
+  String? _loadedSetCode;
+  String? _loadedCollectorNumber;
   late int _count;
-  late int _id;
   bool _initialized = false;
 
   Future<ScryfallCard?> _loadCard(CollectionData r) async {
@@ -43,30 +48,56 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
   }
 
+  void _ensureScryfallFutures(CollectionData r) {
+    // Only re-fetch if the row's identity changed (edit flow swaps to a
+    // different printing). Without this, every setState/increment would
+    // re-issue two Scryfall requests.
+    if (_cardFuture == null ||
+        _loadedSetCode != r.setCode ||
+        _loadedCollectorNumber != r.collectorNumber) {
+      _loadedSetCode = r.setCode;
+      _loadedCollectorNumber = r.collectorNumber;
+      _cardFuture = _loadCard(r);
+      _setFuture = _loadSet(r);
+    }
+  }
+
   void _increment(CollectionData r) {
     setState(() => _count++);
-    widget.repo.updateQuantity(r.id, _count);
+    unawaited(widget.repo.updateQuantity(r.id, _count));
   }
 
-  void _decrement(CollectionData r) {
-    if (_count > 0) {
-      setState(() => _count--);
-      widget.repo.updateQuantity(r.id, _count);
+  Future<void> _decrement(CollectionData r) async {
+    if (_count == 0) return;
+    final nextCount = _count - 1;
+    if (nextCount == 0) {
+      // Delete immediately with an undo snackbar; don't couple destructive
+      // DB state to navigation lifecycle.
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      // Snapshot at the current count so undo restores what the user had.
+      final snapshot = r.copyWith(count: _count);
+      await widget.repo.delete(r.id);
+      if (!mounted) return;
+      messenger.clearSnackBars();
+      messenger.showSnackBar(SnackBar(
+        content: Text('Removed ${r.name}'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(widget.repo.restore(snapshot)),
+        ),
+      ));
+      navigator.pop();
+      return;
     }
-  }
-
-  @override
-  void dispose() {
-    if (_count == 0) {
-      widget.repo.delete(_id);
-    }
-    super.dispose();
+    setState(() => _count = nextCount);
+    unawaited(widget.repo.updateQuantity(r.id, _count));
   }
 
   Future<void> _edit(CollectionData r) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final card = await _loadCard(r);
+    final card = await _cardFuture;
     if (!mounted) return;
     if (card == null) {
       messenger.showSnackBar(
@@ -115,15 +146,15 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           final r = snap.data!;
           if (!_initialized) {
             _count = r.count;
-            _id = r.id;
             _initialized = true;
           }
+          _ensureScryfallFutures(r);
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Center(
                 child: FutureBuilder<ScryfallCard?>(
-                  future: _loadCard(r),
+                  future: _cardFuture,
                   builder: (_, cardSnap) {
                     final url = cardSnap.data?.imageUriNormal;
                     if (cardSnap.connectionState != ConnectionState.done) {
@@ -163,7 +194,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               Text(r.name, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               FutureBuilder<ScryfallSet?>(
-                future: _loadSet(r),
+                future: _setFuture,
                 builder: (ctx, setSnap) {
                   final setName = setSnap.data?.name ?? r.setCode.toUpperCase();
                   return Row(
@@ -206,5 +237,5 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       ),
     );
   }
-}
 
+}

@@ -52,6 +52,14 @@ class ScanMatcher {
     }
 
     if (fuzzy != null && candidates.isEmpty) return fuzzy;
+    // If fuzzy returned a card whose name exactly matches the OCR'd name
+    // (case-insensitive), trust it and skip the autocomplete rescue — no
+    // point spending 2-10 extra Scryfall requests on a match that's
+    // already as good as fuzzy gets.
+    if (fuzzy != null &&
+        fuzzy.name.toLowerCase() == name.toLowerCase()) {
+      return fuzzy;
+    }
 
     // Autocomplete rescue — only runs when no exact match landed. When we do
     // have candidate cn values, prefer a suggestion whose cn matches the OCR;
