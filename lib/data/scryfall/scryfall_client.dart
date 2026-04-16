@@ -27,23 +27,28 @@ class ScryfallClient {
 
   final http.Client _http;
   final Duration _minGap;
-  Future<void> _chain = Future.value();
+  Completer<void>? _tail;
   DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
 
-  Future<T> _throttled<T>(Future<T> Function() fn) {
-    final completer = Completer<T>();
-    _chain = _chain.then((_) async {
-      final now = DateTime.now();
-      final wait = _minGap - now.difference(_last);
+  /// Serialize requests with a minimum gap between them. Each call takes a
+  /// ticket on a FIFO chain; the next caller waits for the prior ticket to
+  /// complete before entering. Errors from [fn] propagate to the caller
+  /// without breaking the chain — the ticket is always released in the
+  /// finally so queued callers continue.
+  Future<T> _throttled<T>(Future<T> Function() fn) async {
+    final prev = _tail;
+    final ticket = Completer<void>();
+    _tail = ticket;
+    try {
+      if (prev != null) await prev.future;
+      final wait = _minGap - DateTime.now().difference(_last);
       if (wait > Duration.zero) await Future<void>.delayed(wait);
       _last = DateTime.now();
-      try {
-        completer.complete(await fn());
-      } catch (e, s) {
-        completer.completeError(e, s);
-      }
-    });
-    return completer.future;
+      return await fn();
+    } finally {
+      if (identical(_tail, ticket)) _tail = null;
+      ticket.complete();
+    }
   }
 
   Future<ScryfallCard> cardBySetAndNumber(String set, String number) {

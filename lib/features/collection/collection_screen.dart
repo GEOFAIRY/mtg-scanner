@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/db/database.dart';
@@ -117,10 +118,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
                               )
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(3),
-                                child: Image.network(
-                                  r.imageSmall!,
+                                child: CachedNetworkImage(
+                                  imageUrl: r.imageSmall!,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const ColoredBox(
+                                  errorWidget: (_, __, ___) => const ColoredBox(
                                     color: Color(0x11000000),
                                     child: Icon(Icons.broken_image,
                                         size: 20, color: Colors.grey),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../data/scryfall/scryfall_models.dart';
 
@@ -144,12 +145,12 @@ class _Thumbnail extends StatelessWidget {
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
-      child: Image.network(
-        url!,
+      child: CachedNetworkImage(
+        imageUrl: url!,
         width: w,
         height: h,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const SizedBox(
+        errorWidget: (_, __, ___) => const SizedBox(
             width: w, height: h, child: ColoredBox(color: Colors.white10)),
       ),
     );

@@ -44,6 +44,12 @@ const _setCrop = _FocusCrop(0.02, 0.84, 0.70, 0.14);
 class MlKitOcrRunner implements OcrRunner {
   final TextRecognizer _recognizer =
       TextRecognizer(script: TextRecognitionScript.latin);
+  // A single reusable scratch file instead of a new file-per-pass with a
+  // microsecondsSinceEpoch + identityHashCode filename. OCR passes run
+  // sequentially within a single captureFromWarpedCrop call, so there's no
+  // concurrent-access concern and we skip the create + delete cycle.
+  late final File _scratch =
+      File('${Directory.systemTemp.path}/mtg_scanner_ocr.png');
 
   @override
   Future<List<OcrBlock>> recognizeBlocks(Uint8List imageBytes) async {
@@ -133,28 +139,22 @@ class MlKitOcrRunner implements OcrRunner {
 
   Future<List<OcrBlock>> _run(
       Uint8List pngBytes, int imgW, int imgH) async {
-    final temp = File(
-        '${Directory.systemTemp.path}/ocr_${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(pngBytes)}.png');
-    await temp.writeAsBytes(pngBytes);
-    try {
-      final input = InputImage.fromFilePath(temp.path);
-      final result = await _recognizer.processImage(input);
-      final w = imgW.toDouble();
-      final h = imgH.toDouble();
-      if (w <= 0 || h <= 0) return const [];
-      return [
-        for (final b in result.blocks)
-          OcrBlock(
-            text: b.text,
-            left: b.boundingBox.left / w,
-            top: b.boundingBox.top / h,
-            width: b.boundingBox.width / w,
-            height: b.boundingBox.height / h,
-          ),
-      ];
-    } finally {
-      if (await temp.exists()) await temp.delete();
-    }
+    await _scratch.writeAsBytes(pngBytes, flush: true);
+    final input = InputImage.fromFilePath(_scratch.path);
+    final result = await _recognizer.processImage(input);
+    final w = imgW.toDouble();
+    final h = imgH.toDouble();
+    if (w <= 0 || h <= 0) return const [];
+    return [
+      for (final b in result.blocks)
+        OcrBlock(
+          text: b.text,
+          left: b.boundingBox.left / w,
+          top: b.boundingBox.top / h,
+          width: b.boundingBox.width / w,
+          height: b.boundingBox.height / h,
+        ),
+    ];
   }
 
   static List<OcrBlock> _mergeBlocks(List<List<OcrBlock>> passes) {
@@ -174,5 +174,12 @@ class MlKitOcrRunner implements OcrRunner {
   }
 
   @override
-  Future<void> dispose() => _recognizer.close();
+  Future<void> dispose() async {
+    await _recognizer.close();
+    try {
+      if (await _scratch.exists()) await _scratch.delete();
+    } catch (_) {
+      // Best-effort cleanup — ignored.
+    }
+  }
 }

@@ -100,13 +100,16 @@ class CollectionRepository {
 
   Future<void> refreshAllPrices({
     void Function(int done, int total)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final rows = await _db.select(_db.collection).get();
     var done = 0;
     for (final row in rows) {
+      if (isCancelled?.call() ?? false) return;
       try {
         final card =
             await _scry.cardBySetAndNumber(row.setCode, row.collectorNumber);
+        if (isCancelled?.call() ?? false) return;
         await (_db.update(_db.collection)..whereSamePrimaryKey(row)).write(
           CollectionCompanion(
             priceUsd: Value(card.prices.usd),
@@ -117,7 +120,7 @@ class CollectionRepository {
           ),
         );
       } on ScryfallException {
-        // skip
+        // skip this row; keep going through the rest of the collection
       }
       done++;
       onProgress?.call(done, rows.length);

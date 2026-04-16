@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import '../../app_settings.dart';
@@ -133,7 +134,9 @@ class _ScannerBodyState extends State<_ScannerBody>
     _streamActive = false;
     try {
       await c.stopImageStream();
-    } catch (_) {}
+    } catch (e, s) {
+      _logCameraError('stopImageStream', e, s);
+    }
   }
 
   Future<void> _resumeStreamIfNotPaused() async {
@@ -148,8 +151,9 @@ class _ScannerBodyState extends State<_ScannerBody>
     _streamActive = true;
     try {
       await c.startImageStream(_onFrame);
-    } catch (_) {
+    } catch (e, s) {
       _streamActive = false;
+      _logCameraError('startImageStream', e, s);
     }
   }
 
@@ -162,7 +166,9 @@ class _ScannerBodyState extends State<_ScannerBody>
     if (mounted) setState(() {});
     try {
       await c.dispose();
-    } catch (_) {}
+    } catch (e, s) {
+      _logCameraError('controller.dispose', e, s);
+    }
   }
 
   Future<void> _init() async {
@@ -177,7 +183,8 @@ class _ScannerBodyState extends State<_ScannerBody>
           enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420);
       try {
         await c.initialize();
-      } catch (_) {
+      } catch (e, s) {
+        _logCameraError('controller.initialize', e, s);
         return;
       }
       if (!mounted) {
@@ -189,12 +196,18 @@ class _ScannerBodyState extends State<_ScannerBody>
       _externallyPaused = false;
       try {
         await c.startImageStream(_onFrame);
-      } catch (_) {
+      } catch (e, s) {
         _streamActive = false;
+        _logCameraError('startImageStream (init)', e, s);
       }
     } finally {
       _initializing = false;
     }
+  }
+
+  void _logCameraError(String op, Object error, StackTrace stack) {
+    if (!kDebugMode) return;
+    debugPrint('[scanner] $op failed: $error');
   }
 
   Future<void> _onFrame(CameraImage img) async {
@@ -301,7 +314,9 @@ class _ScannerBodyState extends State<_ScannerBody>
     try {
       await widget.valuePlayer.stop();
       await widget.valuePlayer.resume();
-    } catch (_) {}
+    } catch (e, s) {
+      _logCameraError('valuePlayer', e, s);
+    }
   }
 
   Future<void> _onDismissBanner() async {
@@ -520,7 +535,9 @@ class _ScannerBodyState extends State<_ScannerBody>
                       try {
                         await c?.setFlashMode(
                             s.torchOn ? FlashMode.off : FlashMode.torch);
-                      } catch (_) {}
+                      } catch (e, st) {
+                        _logCameraError('setFlashMode', e, st);
+                      }
                     },
                   ),
                 ),

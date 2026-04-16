@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
@@ -104,7 +105,8 @@ class _PrintingPickerState extends State<PrintingPicker> {
                       child: ListTile(
                         leading: p.imageUriSmall == null
                             ? const SizedBox(width: 40)
-                            : Image.network(p.imageUriSmall!, width: 40),
+                            : CachedNetworkImage(
+                                imageUrl: p.imageUriSmall!, width: 40),
                         title: Text(
                           '${p.setName} (${p.set.toUpperCase()}) · ${p.collectorNumber}',
                           style: selected

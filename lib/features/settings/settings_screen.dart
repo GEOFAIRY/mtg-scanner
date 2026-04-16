@@ -20,6 +20,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   int? _refreshDone;
   int? _refreshTotal;
+  bool _refreshCancelled = false;
 
   @override
   void initState() {
@@ -29,6 +30,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    // A running refresh must see the screen go away and stop issuing
+    // Scryfall requests + DB writes, otherwise it keeps the price loop
+    // alive after the user has navigated away.
+    _refreshCancelled = true;
     widget.settings.removeListener(_onSettingsChanged);
     super.dispose();
   }
@@ -41,21 +46,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _refreshDone = 0;
       _refreshTotal = null;
+      _refreshCancelled = false;
     });
-    await widget.repo.refreshAllPrices(onProgress: (done, total) {
-      if (!mounted) return;
-      setState(() {
-        _refreshDone = done;
-        _refreshTotal = total;
-      });
-    });
+    await widget.repo.refreshAllPrices(
+      onProgress: (done, total) {
+        if (!mounted) return;
+        setState(() {
+          _refreshDone = done;
+          _refreshTotal = total;
+        });
+      },
+      isCancelled: () => _refreshCancelled || !mounted,
+    );
     if (!mounted) return;
+    final cancelled = _refreshCancelled;
     setState(() {
       _refreshDone = null;
       _refreshTotal = null;
     });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Prices refreshed')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(cancelled ? 'Refresh cancelled' : 'Prices refreshed'),
+    ));
+  }
+
+  void _cancelRefresh() {
+    setState(() => _refreshCancelled = true);
   }
 
   Future<void> _editThreshold() async {
@@ -160,10 +175,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : Text('Refreshing… $_refreshDone / ${_refreshTotal ?? "?"}'),
             trailing: _refreshDone == null
                 ? const Icon(Icons.refresh)
-                : const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                : IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Cancel',
+                    onPressed: _cancelRefresh,
+                  ),
             onTap: _refreshDone == null ? _refreshAll : null,
           ),
           const Divider(),

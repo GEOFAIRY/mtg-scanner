@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/collection_repository.dart';
@@ -174,11 +175,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     }
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        url,
+                      child: CachedNetworkImage(
+                        imageUrl: url,
                         height: 360,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const SizedBox(
+                        errorWidget: (_, __, ___) => const SizedBox(
                           height: 360,
                           child: Center(
                             child: Icon(Icons.broken_image,

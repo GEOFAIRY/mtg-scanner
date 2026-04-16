@@ -36,6 +36,33 @@ void main() {
         throwsA(isA<ScryfallNotFound>()));
   });
 
+  test('error in one call does not stall queued callers', () async {
+    final callHistory = <String>[];
+    when(() => http_.get(any(), headers: any(named: 'headers')))
+        .thenAnswer((inv) async {
+      final url = (inv.positionalArguments[0] as Uri).toString();
+      callHistory.add(url);
+      if (url.contains('boom')) {
+        return http.Response('server fire', 500);
+      }
+      return http.Response(
+          jsonEncode({
+            'id': 'x', 'name': 'X', 'set': 'xxx', 'collector_number': '1',
+            'prices': {'usd': null, 'usd_foil': null},
+          }),
+          200);
+    });
+    final c = ScryfallClient(http_, minGap: Duration.zero);
+
+    // First call fails; second call (queued behind it) must still complete.
+    final first = c.cardBySetAndNumber('boom', '1');
+    final second = c.cardBySetAndNumber('ok', '2');
+    await expectLater(first, throwsA(isA<ScryfallException>()));
+    final card = await second;
+    expect(card.name, 'X');
+    expect(callHistory, hasLength(2));
+  });
+
   test('rate-limits to minGap between requests', () async {
     final times = <DateTime>[];
     when(() => http_.get(any(), headers: any(named: 'headers')))
