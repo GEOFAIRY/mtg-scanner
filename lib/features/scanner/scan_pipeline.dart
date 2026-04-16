@@ -18,9 +18,11 @@ class CaptureResult {
     required this.price,
     required this.foil,
     required this.wasInsertion,
-  }) : outcome = CaptureOutcome.matched;
+  })  : outcome = CaptureOutcome.matched,
+        debugOcrName = null,
+        debugOcrSet = null;
 
-  CaptureResult.noMatch()
+  CaptureResult.noMatch({this.debugOcrName, this.debugOcrSet})
       : outcome = CaptureOutcome.noMatch,
         collectionId = null,
         card = null,
@@ -34,7 +36,9 @@ class CaptureResult {
         card = null,
         price = null,
         foil = false,
-        wasInsertion = false;
+        wasInsertion = false,
+        debugOcrName = null,
+        debugOcrSet = null;
 
   final CaptureOutcome outcome;
   final int? collectionId;
@@ -42,6 +46,8 @@ class CaptureResult {
   final double? price;
   final bool foil;
   final bool wasInsertion;
+  final String? debugOcrName;
+  final String? debugOcrSet;
 }
 
 class ScanPipeline {
@@ -84,7 +90,10 @@ class ScanPipeline {
       return CaptureResult.offline();
     }
 
-    if (card == null) return CaptureResult.noMatch();
+    if (card == null) {
+      return CaptureResult.noMatch(
+          debugOcrName: rawName, debugOcrSet: rawSet);
+    }
 
     var foil = forceFoil;
     if (!foil) {

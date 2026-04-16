@@ -69,6 +69,7 @@ class _ScannerBodyState extends State<_ScannerBody>
   final _tracker = StabilityTracker();
   final _forceFoil = ValueNotifier<bool>(false);
   final _banner = ValueNotifier<BannerData?>(null);
+  final _debugOcr = ValueNotifier<String?>(null);
   bool _busy = false;
   DateTime? _lastCaptureAt;
   // Re-arm only after a run of truly empty frames — a single rect-null flicker
@@ -296,12 +297,17 @@ class _ScannerBodyState extends State<_ScannerBody>
           return;
         case CaptureOutcome.noMatch:
           _state.toNoMatch();
+          if (res.debugOcrName != null || res.debugOcrSet != null) {
+            _debugOcr.value =
+                'N: ${res.debugOcrName ?? ""}\nS: ${res.debugOcrSet ?? ""}';
+          }
           break;
         case CaptureOutcome.offline:
           _state.toOffline();
           break;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await Future<void>.delayed(const Duration(seconds: 3));
+      _debugOcr.value = null;
       _state.toSearching();
       _tracker.reset();
     } finally {
@@ -437,6 +443,7 @@ class _ScannerBodyState extends State<_ScannerBody>
     _state.dispose();
     _forceFoil.dispose();
     _banner.dispose();
+    _debugOcr.dispose();
     super.dispose();
   }
 
@@ -453,6 +460,34 @@ class _ScannerBodyState extends State<_ScannerBody>
           ValueListenableBuilder<ScannerState>(
             valueListenable: _state,
             builder: (_, s, __) => _Overlay(state: s),
+          ),
+          ValueListenableBuilder<String?>(
+            valueListenable: _debugOcr,
+            builder: (_, text, __) {
+              if (text == null) return const SizedBox.shrink();
+              return Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 110),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      text,
+                      style: const TextStyle(
+                        color: Colors.amber,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
           Positioned(
             bottom: 196,
