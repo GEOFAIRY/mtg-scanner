@@ -37,7 +37,16 @@ class ScanMatcher {
     final primaryCn = parsed.collectorNumber;
     if (parsed.setCode != null && primaryCn != null) {
       try {
-        return await scry.cardBySetAndNumber(parsed.setCode!, primaryCn);
+        final card =
+            await scry.cardBySetAndNumber(parsed.setCode!, primaryCn);
+        // The set code from OCR is often garbage (especially on old-border
+        // and retro frames). If the returned card's name doesn't resemble
+        // the OCR'd name at all, this is a false positive (e.g. OCR reads
+        // "S99/103" → Goblin Hero when the user scanned Lavaborn Muse).
+        // Drop it and let fuzzy sort things out.
+        if (name.isEmpty || _namesSimilar(name, card.name)) {
+          return card;
+        }
       } on ScryfallNotFound {
         // fall through to fuzzy
       }
@@ -92,5 +101,16 @@ class ScanMatcher {
     }
 
     return fuzzy;
+  }
+
+  /// Quick sanity check: do the OCR'd name and the card name share at least
+  /// one meaningful word? Catches obvious mismatches like "Lavaborn Muse" vs
+  /// "Goblin Hero" without requiring a full edit-distance computation.
+  static bool _namesSimilar(String ocrName, String cardName) {
+    final ocrWords = ocrName.toLowerCase().split(RegExp(r'[\s,]+'))
+      ..removeWhere((w) => w.length < 3);
+    final cardWords = cardName.toLowerCase().split(RegExp(r'[\s,]+'))
+      ..removeWhere((w) => w.length < 3);
+    return ocrWords.any(cardWords.contains);
   }
 }

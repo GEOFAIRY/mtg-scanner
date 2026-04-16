@@ -29,47 +29,58 @@ RectCandidate? detectCardRectOnMat(
 }) =>
     _detect(src, minAreaFraction: minAreaFraction);
 
+// Canny thresholds: standard (30, 90) works for normal-bordered cards.
+// Lower thresholds (15, 50) catch the subtle card-to-table edge on
+// borderless / full-art cards. We try both and keep the largest quad.
+const _cannyLevels = [(30, 90), (15, 50)];
+
 RectCandidate? _detect(cv.Mat src, {required double minAreaFraction}) {
   final gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
   final blurred = cv.gaussianBlur(gray, (5, 5), 0);
-  final edges = cv.canny(blurred, 30, 90);
-  final (contours, _) =
-      cv.findContours(edges, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
   try {
     final frameArea = src.width * src.height.toDouble();
     RectCandidate? best;
-    for (var i = 0; i < contours.length; i++) {
-      final c = contours[i];
-      final peri = cv.arcLength(c, true);
-      if (peri < 50) continue;
-      for (final eps in const [0.02, 0.035, 0.05]) {
-        final approx = cv.approxPolyDP(c, eps * peri, true);
-        try {
-          if (approx.length != 4) continue;
-          final area = cv.contourArea(approx);
-          if (area < frameArea * minAreaFraction) continue;
-          if (best != null && area <= best.areaPx) continue;
-          final points = <({double x, double y})>[
-            for (var j = 0; j < 4; j++)
-              (x: approx[j].x.toDouble(), y: approx[j].y.toDouble()),
-          ];
-          points.sort((a, b) => (a.y + a.x).compareTo(b.y + b.x));
-          final tl = points.first, br = points.last;
-          final mid = [points[1], points[2]]..sort((a, b) => a.x.compareTo(b.x));
-          final bl = mid.first, tr = mid.last;
-          best = RectCandidate(CardQuad(tl, tr, br, bl), area);
-        } finally {
-          approx.dispose();
+    for (final (lo, hi) in _cannyLevels) {
+      final edges = cv.canny(blurred, lo.toDouble(), hi.toDouble());
+      final (contours, _) =
+          cv.findContours(edges, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+      try {
+        for (var i = 0; i < contours.length; i++) {
+          final c = contours[i];
+          final peri = cv.arcLength(c, true);
+          if (peri < 50) continue;
+          for (final eps in const [0.02, 0.035, 0.05]) {
+            final approx = cv.approxPolyDP(c, eps * peri, true);
+            try {
+              if (approx.length != 4) continue;
+              final area = cv.contourArea(approx);
+              if (area < frameArea * minAreaFraction) continue;
+              if (best != null && area <= best.areaPx) continue;
+              final points = <({double x, double y})>[
+                for (var j = 0; j < 4; j++)
+                  (x: approx[j].x.toDouble(), y: approx[j].y.toDouble()),
+              ];
+              points.sort((a, b) => (a.y + a.x).compareTo(b.y + b.x));
+              final tl = points.first, br = points.last;
+              final mid = [points[1], points[2]]
+                ..sort((a, b) => a.x.compareTo(b.x));
+              final bl = mid.first, tr = mid.last;
+              best = RectCandidate(CardQuad(tl, tr, br, bl), area);
+            } finally {
+              approx.dispose();
+            }
+            break;
+          }
         }
-        break;
+      } finally {
+        edges.dispose();
+        contours.dispose();
       }
     }
     return best;
   } finally {
     gray.dispose();
     blurred.dispose();
-    edges.dispose();
-    contours.dispose();
   }
 }
 
