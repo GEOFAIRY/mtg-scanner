@@ -31,13 +31,16 @@ class ScanMatcher {
       for (final cn in candidates) {
         final hits = await scry.cardsByNameAndCollectorNumber(name, cn);
         if (hits.isEmpty) continue;
-        // When we have a set code from OCR, prefer the printing whose set
-        // matches. Basic lands and other heavily-reprinted cards produce
-        // many name+cn hits across sets (e.g. Mountain 280 in DMU vs MOM).
         if (parsed.setCode != null) {
+          // Basic lands and reprints produce many name+cn hits across sets
+          // (Mountain 280 in DMU vs MOM). Prefer one whose set matches the
+          // OCR'd set code; if none match, skip this cn and let the set+cn
+          // path attempt a direct lookup rather than returning the wrong
+          // most-recent printing.
           final setMatch = hits.where(
               (c) => c.set.toUpperCase() == parsed.setCode).toList();
           if (setMatch.isNotEmpty) return setMatch.first;
+          continue;
         }
         return hits.first;
       }
