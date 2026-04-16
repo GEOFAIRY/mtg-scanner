@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:image/image.dart' as img;
+
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
@@ -81,9 +83,26 @@ class ScanPipeline {
     Uint8List uprightPng, {
     bool forceFoil = false,
   }) async {
-    final blocks = await ocr.recognizeBlocks(uprightPng);
-    final rawName = _pickName(blocks);
-    final rawSet = _pickSetCollector(blocks);
+    var blocks = await ocr.recognizeBlocks(uprightPng);
+    var rawName = _pickName(blocks);
+    var rawSet = _pickSetCollector(blocks);
+
+    // Orientation fix: if the picked name looks like rules/oracle text
+    // (contains MTG gameplay keywords) OR both name and set are empty while
+    // blocks DO exist (text is there, just not in the expected bands), the
+    // card was likely warped upside down. Rotate 180° and re-OCR.
+    final needsFlip = _looksLikeOracleText(rawName) ||
+        (rawName.isEmpty && rawSet.isEmpty && blocks.isNotEmpty);
+    if (needsFlip) {
+      final decoded = img.decodeImage(uprightPng);
+      if (decoded != null) {
+        final rotated = img.copyRotate(decoded, angle: 180);
+        uprightPng = Uint8List.fromList(img.encodePng(rotated));
+        blocks = await ocr.recognizeBlocks(uprightPng);
+        rawName = _pickName(blocks);
+        rawSet = _pickSetCollector(blocks);
+      }
+    }
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
 
     final ScryfallCard? card;
@@ -126,6 +145,21 @@ class ScanPipeline {
       foil: foil,
       wasInsertion: result.wasInsertion,
     );
+  }
+
+  // MTG gameplay keywords that appear in oracle/rules text but never in card
+  // names. If the "name" we picked contains one of these, the warp is almost
+  // certainly upside down (rules text at the top instead of the name banner).
+  static final _oracleKeywords = RegExp(
+      r'\b(mana|creature|target|counter|damage|draw|discard|exile|sacrifice|'
+      r'graveyard|battlefield|enchant|equip|activate|upkeep|haste|flying|'
+      r'trample|lifelink|vigilance|deathtouch|reach|menace|ward|hexproof|'
+      r'indestructible|flash|defender)\b',
+      caseSensitive: false);
+
+  static bool _looksLikeOracleText(String name) {
+    if (name.isEmpty) return false;
+    return _oracleKeywords.hasMatch(name);
   }
 
   static final _hasLetter = RegExp(r'[A-Za-z]');
