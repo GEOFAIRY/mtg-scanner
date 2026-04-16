@@ -15,8 +15,8 @@ double _dist(({double x, double y}) a, ({double x, double y}) b) {
 Uint8List warpToUpright(
   Uint8List frameBytes, {
   required CardQuad quad,
-  int targetWidth = 488,
-  int targetHeight = 680,
+  int targetWidth = 750,
+  int targetHeight = 1050,
 }) {
   final src = cv.imdecode(frameBytes, cv.IMREAD_COLOR);
   try {
@@ -33,8 +33,8 @@ Uint8List warpToUpright(
 Uint8List warpToUprightOnMat(
   cv.Mat src, {
   required CardQuad quad,
-  int targetWidth = 488,
-  int targetHeight = 680,
+  int targetWidth = 750,
+  int targetHeight = 1050,
 }) {
   // MTG cards are portrait. If the detected quad is landscape (top edge
   // longer than left edge), rotate the corner labels 90° CW so the warp

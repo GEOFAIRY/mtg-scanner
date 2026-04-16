@@ -109,32 +109,83 @@ class MlKitOcrRunner implements OcrRunner {
     final w = (crop.width * src.width).round();
     final h = (crop.height * src.height).round();
     if (w <= 0 || h <= 0) return const [];
-    var region = img.copyCrop(src, x: x, y: y, width: w, height: h);
-    region = img.contrast(img.grayscale(region), contrast: 135);
-    // Upscale small crops so tiny collector-number glyphs cross ML Kit's
-    // minimum-glyph-size threshold.
-    if (region.width < 400) {
-      final scale = 400 / region.width;
-      region = img.copyResize(region,
-          width: 400,
-          height: (region.height * scale).round(),
-          interpolation: img.Interpolation.cubic);
+    final rawCrop = img.copyCrop(src, x: x, y: y, width: w, height: h);
+
+    // Run two variants of the focused crop and merge:
+    // 1. Grayscale + contrast — the original approach.
+    // 2. Grayscale + OTSU binarization — adapts to whatever contrast the
+    //    crop has and produces clean black/white that ML Kit reads well on
+    //    retro tan banners and borderless translucent overlays alike.
+    final results = <List<OcrBlock>>[];
+    for (final preprocess in [_contrastPreprocess, _otsuPreprocess]) {
+      var region = preprocess(rawCrop);
+      if (region.width < 600) {
+        final scale = 600 / region.width;
+        region = img.copyResize(region,
+            width: 600,
+            height: (region.height * scale).round(),
+            interpolation: img.Interpolation.cubic);
+      }
+      final blocks = await _run(
+          Uint8List.fromList(img.encodePng(region)),
+          region.width,
+          region.height);
+      results.add([
+        for (final b in blocks)
+          OcrBlock(
+            text: b.text,
+            left: crop.left + b.left * crop.width,
+            top: crop.top + b.top * crop.height,
+            width: b.width * crop.width,
+            height: b.height * crop.height,
+          ),
+      ]);
     }
-    final blocks = await _run(
-        Uint8List.fromList(img.encodePng(region)),
-        region.width,
-        region.height);
-    // Map bounding boxes from the crop back to card-normalized coordinates.
-    return [
-      for (final b in blocks)
-        OcrBlock(
-          text: b.text,
-          left: crop.left + b.left * crop.width,
-          top: crop.top + b.top * crop.height,
-          width: b.width * crop.width,
-          height: b.height * crop.height,
-        ),
-    ];
+    return _mergeBlocks(results);
+  }
+
+  static img.Image _contrastPreprocess(img.Image src) =>
+      img.contrast(img.grayscale(img.Image.from(src)), contrast: 135);
+
+  static img.Image _otsuPreprocess(img.Image src) {
+    final gray = img.grayscale(img.Image.from(src));
+    // Manual OTSU threshold: compute histogram, find the threshold that
+    // minimizes intra-class variance, then binarize.
+    final hist = List.filled(256, 0);
+    for (final pixel in gray) {
+      hist[pixel.r.toInt()]++;
+    }
+    final total = gray.width * gray.height;
+    var sumAll = 0.0;
+    for (var i = 0; i < 256; i++) {
+      sumAll += i * hist[i];
+    }
+    var sumBg = 0.0;
+    var wBg = 0;
+    var bestThresh = 0;
+    var bestVar = 0.0;
+    for (var t = 0; t < 256; t++) {
+      wBg += hist[t];
+      if (wBg == 0) continue;
+      final wFg = total - wBg;
+      if (wFg == 0) break;
+      sumBg += t * hist[t];
+      final meanBg = sumBg / wBg;
+      final meanFg = (sumAll - sumBg) / wFg;
+      final varBetween = wBg * wFg * (meanBg - meanFg) * (meanBg - meanFg);
+      if (varBetween > bestVar) {
+        bestVar = varBetween;
+        bestThresh = t;
+      }
+    }
+    for (final pixel in gray) {
+      final v = pixel.r.toInt() >= bestThresh ? 255 : 0;
+      pixel
+        ..r = v
+        ..g = v
+        ..b = v;
+    }
+    return gray;
   }
 
   Future<List<OcrBlock>> _run(
