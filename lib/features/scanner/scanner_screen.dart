@@ -10,6 +10,7 @@ import '../../app_settings.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import 'edit_scan_modal.dart';
+import 'frame_budget.dart';
 import 'perspective_correct.dart';
 import 'result_banner.dart';
 import 'scan_pipeline.dart';
@@ -73,6 +74,7 @@ class _ScannerBodyState extends State<_ScannerBody>
   CameraController? _controller;
   final _state = ScannerStateNotifier();
   final _tracker = StabilityTracker();
+  final _detectBudget = FrameBudget(minInterval: const Duration(milliseconds: 100));
   final _forceFoil = ValueNotifier<bool>(false);
   final _banner = ValueNotifier<BannerData?>(null);
   final _debugOcr = ValueNotifier<String?>(null);
@@ -82,6 +84,7 @@ class _ScannerBodyState extends State<_ScannerBody>
   // (shadow, hand moving across the card) used to re-trigger capture and
   // produce duplicate scans of the same card.
   static const _emptyFramesToReArm = 6;
+  static const _detectDownscaleWidth = 640;
   int _emptyStreak = _emptyFramesToReArm;
   // Suppress re-capturing the same Scryfall card back-to-back.
   String? _lastMatchedCardId;
@@ -219,19 +222,48 @@ class _ScannerBodyState extends State<_ScannerBody>
 
   Future<void> _onFrame(CameraImage img) async {
     if (_busy || _state.value.paused || _externallyPaused) return;
+    if (!_detectBudget.shouldRun(DateTime.now())) return;
     _busy = true;
     cv.Mat? bgr;
+    cv.Mat? small;
     try {
       bgr = _bgrMatFromFrame(img);
       if (bgr == null) return;
-      final rect = detectCardRectOnMat(bgr);
-      if (rect == null) {
+
+      // Downscale for rect detection — full-res detection is only needed at
+      // capture time. Quad coordinates are returned in small-Mat pixel space
+      // and are scaled back up to full-res before pushing into the stability
+      // tracker (whose jitter threshold assumes full-res pixels).
+      final scale = _detectDownscaleWidth / bgr.cols;
+      final RectCandidate? smallRect;
+      if (scale >= 1.0) {
+        smallRect = detectCardRectOnMat(bgr);
+      } else {
+        final targetH = (bgr.rows * scale).round();
+        small = cv.resize(bgr, (_detectDownscaleWidth, targetH));
+        smallRect = detectCardRectOnMat(small);
+      }
+
+      if (smallRect == null) {
         _tracker.reset();
         _state.toSearching();
         if (_emptyStreak < _emptyFramesToReArm) _emptyStreak++;
         return;
       }
-      _tracker.push(rect.quad);
+
+      // Lift small-Mat coords back to full-res space.
+      final liftScale = scale >= 1.0 ? 1.0 : (1.0 / scale);
+      final liftedQuad = CardQuad(
+        (x: smallRect.quad.tl.x * liftScale,
+            y: smallRect.quad.tl.y * liftScale),
+        (x: smallRect.quad.tr.x * liftScale,
+            y: smallRect.quad.tr.y * liftScale),
+        (x: smallRect.quad.br.x * liftScale,
+            y: smallRect.quad.br.y * liftScale),
+        (x: smallRect.quad.bl.x * liftScale,
+            y: smallRect.quad.bl.y * liftScale),
+      );
+      _tracker.push(liftedQuad);
       _state.toTracking();
       if (!_tracker.isStable) return;
       if (_emptyStreak < _emptyFramesToReArm) return;
@@ -240,9 +272,6 @@ class _ScannerBodyState extends State<_ScannerBody>
           _lastCaptureAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (sinceLast.inMilliseconds < 500) return;
 
-      // Duplicate-scan gate: if we just matched the same card, require the
-      // card to physically leave the frame before triggering again rather
-      // than paying the OCR + Scryfall + DB cost only to roll it back.
       if (_lastMatchedAt != null &&
           DateTime.now().difference(_lastMatchedAt!) < _duplicateWindow) {
         return;
@@ -251,7 +280,14 @@ class _ScannerBodyState extends State<_ScannerBody>
       if (_externallyPaused || _state.value.paused) return;
       _emptyStreak = 0;
       _state.toCapturing();
-      final upright = warpToUprightOnMat(bgr, quad: rect.quad);
+
+      // Full-resolution re-detect for a pixel-accurate warp quad. If the
+      // full-res detect misses (rare — downscaled version just found one),
+      // fall back to the scaled-up quad from the tracker.
+      final fullRect = detectCardRectOnMat(bgr);
+      final warpQuad = fullRect?.quad ?? liftedQuad;
+      final upright = warpToUprightOnMat(bgr, quad: warpQuad);
+
       _state.toMatching();
       final res = await widget.pipeline
           .captureFromWarpedCrop(upright, forceFoil: _forceFoil.value);
@@ -270,9 +306,6 @@ class _ScannerBodyState extends State<_ScannerBody>
               _lastMatchedAt != null &&
               now.difference(_lastMatchedAt!) < _duplicateWindow;
           if (isDuplicate) {
-            // Same card matched again within the cooldown — the user almost
-            // certainly hasn't swapped cards; undo the insertion the pipeline
-            // just performed and keep the existing banner.
             await widget.collection.undoAdd(
                 id: res.collectionId!, wasInsertion: res.wasInsertion);
             if (_externallyPaused || _state.value.paused) {
@@ -326,6 +359,7 @@ class _ScannerBodyState extends State<_ScannerBody>
       _state.toSearching();
       _tracker.reset();
     } finally {
+      small?.dispose();
       bgr?.dispose();
       _busy = false;
     }
