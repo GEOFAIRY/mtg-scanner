@@ -207,32 +207,38 @@ class ScanPipeline {
 
   static final _hasLetter = RegExp(r'[A-Za-z]');
 
+  static final _manaCostCharOnly = RegExp(r'^[0-9WUBRGCXYwubrgcxy/{}]+$');
+
   static String _pickName(List<OcrBlock> blocks) {
     final candidates = blocks
         .where((b) =>
             b.top < _nameBandBottom &&
             _hasLetter.hasMatch(b.text) &&
             b.text.trim().length >= 3)
-        .toList()
-      ..sort((a, b) => b.width.compareTo(a.width));
+        .toList();
     if (candidates.isEmpty) return '';
-    final lines = candidates.first.text
+    // Sort by height desc — title is the largest glyphs in the name band.
+    candidates.sort((a, b) => b.height.compareTo(a.height));
+    final tallest = candidates.first.height;
+    // Tiebreak: among blocks within 10% of the tallest, prefer the one
+    // closest to the left edge (name banner is left-aligned on modern frames).
+    final nearTies = candidates
+        .where((b) => b.height >= tallest * 0.9)
+        .toList()
+      ..sort((a, b) => a.left.compareTo(b.left));
+    final winner = nearTies.first;
+    // Keep all lines of the winning block, dropping lines that carry no
+    // letters (pure digits / punctuation) or that are entirely a mana-cost
+    // pattern. `Wurmcoil Engine` is safe — 'm', 'i', 'l', 'n', 'e' fall
+    // outside the mana-cost character set.
+    final lines = winner.text
         .split('\n')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
+        .where((s) => _hasLetter.hasMatch(s))
+        .where((s) => !_manaCostCharOnly.hasMatch(s.replaceAll(' ', '')))
         .toList();
-    if (lines.isEmpty) return '';
-    final first = lines.first;
-    // Only the first line's mana cost / type line spillover on compact
-    // frames poisons the fuzzy-name lookup, so we default to it. But when
-    // the first line ends in a comma (e.g. "Urza,") or is a single bare
-    // word ("Jace"), the real card name almost always continues onto the
-    // second line — join it so names like "Urza, Lord Protector" survive.
-    if (lines.length > 1 &&
-        (first.endsWith(',') || !first.contains(' '))) {
-      return '$first ${lines[1]}';
-    }
-    return first;
+    return lines.join(' ');
   }
 
   static String _pickSetCollector(List<OcrBlock> blocks) {

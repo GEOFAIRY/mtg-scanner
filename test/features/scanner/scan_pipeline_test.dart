@@ -169,5 +169,92 @@ void main() {
 
     expect(res.outcome, CaptureOutcome.offline);
   }, timeout: const Timeout(Duration(seconds: 10)));
+
+  test('pickName prefers tallest block over widest in name band', () async {
+    // Simulates the "glued mana cost + type line" failure: a wide short block
+    // that would outrank a taller title block under the old width heuristic.
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          OcrBlock(
+              text: '{2}{W}{U} Legendary Creature Human Wizard',
+              left: 0.05,
+              top: 0.08,
+              width: 0.90,
+              height: 0.03),
+          OcrBlock(
+              text: 'Urza, Lord Protector',
+              left: 0.05,
+              top: 0.05,
+              width: 0.60,
+              height: 0.06),
+          OcrBlock(
+              text: 'dmu 125', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
+        ]);
+    final captured = <ParsedOcr>[];
+    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+        .thenAnswer((inv) async {
+      captured.add(inv.positionalArguments.first as ParsedOcr);
+      return _card();
+    });
+
+    await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+
+    expect(captured.single.rawName, 'Urza, Lord Protector');
+  });
+
+  test('pickName keeps multi-line name and drops mana-cost / digit lines',
+      () async {
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          // Winning block: mana cost line + two-line name.
+          OcrBlock(
+              text: '{2}{W}{U}\nUrza, Lord\nProtector',
+              left: 0.05,
+              top: 0.05,
+              width: 0.60,
+              height: 0.10),
+          OcrBlock(
+              text: 'dmu 125', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
+        ]);
+    final captured = <ParsedOcr>[];
+    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+        .thenAnswer((inv) async {
+      captured.add(inv.positionalArguments.first as ParsedOcr);
+      return _card();
+    });
+
+    await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+
+    expect(captured.single.rawName, 'Urza, Lord Protector');
+  });
+
+  test('pickName tiebreaks near-equal heights by proximity to left edge',
+      () async {
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          // Right-side block first — same height as the left one, should lose.
+          OcrBlock(
+              text: 'Flavor Banner',
+              left: 0.50,
+              top: 0.05,
+              width: 0.45,
+              height: 0.062),
+          OcrBlock(
+              text: 'Lightning Bolt',
+              left: 0.05,
+              top: 0.05,
+              width: 0.45,
+              height: 0.060),
+          OcrBlock(
+              text: '2xm 137', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
+        ]);
+    final captured = <ParsedOcr>[];
+    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+        .thenAnswer((inv) async {
+      captured.add(inv.positionalArguments.first as ParsedOcr);
+      return _card();
+    });
+
+    await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+
+    expect(captured.single.rawName, 'Lightning Bolt');
+  });
 }
 
