@@ -1,7 +1,7 @@
-/// Tiny time-based throttle. Each call to [shouldRun] returns true if at
+/// Tiny time-based throttle. Each call to [tryConsume] returns true if at
 /// least [minInterval] has passed since the last true return, in which case
 /// the call is "consumed" and the internal clock advances. Calling
-/// [shouldRun] with false return does not advance the clock.
+/// [tryConsume] with false return does not advance the clock.
 ///
 /// Injecting `now` lets callers (and tests) use a deterministic clock
 /// without reaching for `FakeAsync`.
@@ -11,7 +11,7 @@ class FrameBudget {
   final Duration minInterval;
   DateTime? _lastRun;
 
-  bool shouldRun(DateTime now) {
+  bool tryConsume(DateTime now) {
     final last = _lastRun;
     if (last == null || now.difference(last) >= minInterval) {
       _lastRun = now;

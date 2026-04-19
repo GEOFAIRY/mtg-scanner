@@ -222,7 +222,7 @@ class _ScannerBodyState extends State<_ScannerBody>
 
   Future<void> _onFrame(CameraImage img) async {
     if (_busy || _state.value.paused || _externallyPaused) return;
-    if (!_detectBudget.shouldRun(DateTime.now())) return;
+    if (!_detectBudget.tryConsume(DateTime.now())) return;
     _busy = true;
     cv.Mat? bgr;
     cv.Mat? small;
@@ -253,15 +253,13 @@ class _ScannerBodyState extends State<_ScannerBody>
 
       // Lift small-Mat coords back to full-res space.
       final liftScale = scale >= 1.0 ? 1.0 : (1.0 / scale);
+      ({double x, double y}) lift(({double x, double y}) p) =>
+          (x: p.x * liftScale, y: p.y * liftScale);
       final liftedQuad = CardQuad(
-        (x: smallRect.quad.tl.x * liftScale,
-            y: smallRect.quad.tl.y * liftScale),
-        (x: smallRect.quad.tr.x * liftScale,
-            y: smallRect.quad.tr.y * liftScale),
-        (x: smallRect.quad.br.x * liftScale,
-            y: smallRect.quad.br.y * liftScale),
-        (x: smallRect.quad.bl.x * liftScale,
-            y: smallRect.quad.bl.y * liftScale),
+        lift(smallRect.quad.tl),
+        lift(smallRect.quad.tr),
+        lift(smallRect.quad.br),
+        lift(smallRect.quad.bl),
       );
       _tracker.push(liftedQuad);
       _state.toTracking();
