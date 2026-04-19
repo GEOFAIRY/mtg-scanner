@@ -137,9 +137,9 @@ void main() {
   test('autocomplete rescue fuzzy-branch runs without cn but scoring rejects '
       'low-confidence result', () async {
     // With no cn/set signal and a noisy OCR name, the autocomplete-rescued
-    // card only contributes its name similarity to the score. Under the
-    // scoring semantics, 0.5 * nameSim alone caps at 0.5 — so a noisy
-    // autocomplete rescue is intentionally rejected as low confidence.
+    // card only contributes its name similarity to the score. The name-only
+    // path caps below 0.5 for any imperfect OCR (non-zero edit distance), so
+    // the result is correctly rejected as low confidence.
     when(() => scry.cardByFuzzyName('Lghtning Blt'))
         .thenThrow(ScryfallNotFound('fuzzy'));
     when(() => scry.autocomplete('Lghtning Blt'))

@@ -33,13 +33,11 @@ class ScanMatcher {
   Future<ScryfallCard?> match(ParsedOcr parsed, {bool isListCard = false}) async {
     final name = parsed.name;
     final candidates = parsed.collectorNumberCandidates;
-    final pool = <ScryfallCard>[];
     ScryfallCard? best;
     double bestScore = -1.0;
 
     void consider(Iterable<ScryfallCard> cards) {
       for (final c in cards) {
-        pool.add(c);
         final s = _scoreCandidate(c, parsed);
         if (s > bestScore) {
           bestScore = s;
@@ -139,9 +137,7 @@ class ScanMatcher {
       }
     }
 
-    if (pool.isEmpty) return null;
-    if (bestScore >= _acceptThreshold) return best;
-    return null;
+    return (best != null && bestScore >= _acceptThreshold) ? best : null;
   }
 
   double _scoreCandidate(ScryfallCard card, ParsedOcr parsed) {
