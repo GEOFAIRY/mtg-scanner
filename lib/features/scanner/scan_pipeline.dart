@@ -88,20 +88,31 @@ class ScanPipeline {
     var rawName = _pickName(blocks);
     var rawSet = _pickSetCollector(blocks);
 
-    // Orientation fix: if the picked name looks like rules/oracle text
-    // (contains MTG gameplay keywords) OR both name and set are empty while
-    // blocks DO exist (text is there, just not in the expected bands), the
-    // card was likely warped upside down. Rotate 180° and re-OCR.
-    final needsFlip = _looksLikeOracleText(rawName) ||
-        (rawName.isEmpty && rawSet.isEmpty && blocks.isNotEmpty);
-    if (needsFlip) {
+    // Orientation recovery: if the picked name looks like oracle/rules text
+    // OR the picker couldn't find a name at all (but blocks exist — meaning
+    // text is there, just not in the expected bands), the warp is likely
+    // rotated. Try 90° / 180° / 270° in order and accept the first rotation
+    // that yields a non-empty, non-oracle-text name.
+    bool needsRotation() =>
+        _looksLikeOracleText(rawName) ||
+        (rawName.isEmpty && blocks.isNotEmpty);
+    if (needsRotation()) {
       final decoded = img.decodeImage(uprightPng);
       if (decoded != null) {
-        final rotated = img.copyRotate(decoded, angle: 180);
-        uprightPng = Uint8List.fromList(img.encodePng(rotated));
-        blocks = await ocr.recognizeBlocks(uprightPng);
-        rawName = _pickName(blocks);
-        rawSet = _pickSetCollector(blocks);
+        for (final angle in const [90, 180, 270]) {
+          final rotated = img.copyRotate(decoded, angle: angle);
+          final rotatedBytes = Uint8List.fromList(img.encodePng(rotated));
+          final rotatedBlocks = await ocr.recognizeBlocks(rotatedBytes);
+          final rotatedName = _pickName(rotatedBlocks);
+          final rotatedSet = _pickSetCollector(rotatedBlocks);
+          if (rotatedName.isNotEmpty && !_looksLikeOracleText(rotatedName)) {
+            uprightPng = rotatedBytes;
+            blocks = rotatedBlocks;
+            rawName = rotatedName;
+            rawSet = rotatedSet;
+            break;
+          }
+        }
       }
     }
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);

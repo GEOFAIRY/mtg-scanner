@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:mocktail/mocktail.dart';
 import 'package:mtg_card_scanner/data/db/database.dart';
 import 'package:mtg_card_scanner/data/repositories/collection_repository.dart';
@@ -224,6 +225,61 @@ void main() {
     await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
 
     expect(captured.single.rawName, 'Urza, Lord Protector');
+  });
+
+  test('orientation: retries multiple rotations when initial pass finds no name',
+      () async {
+    // Calls 1 and 2 return a mid-card block — picker always returns empty.
+    // Today's code makes one 180° retry (call 2), then gives up with empty
+    // name. Under the new multi-angle loop, call 3 (next rotation) returns
+    // an upright top-band block and the picker finds the name.
+    var call = 0;
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async {
+      call++;
+      if (call <= 2) {
+        return [
+          OcrBlock(
+              text: 'mid-card noise',
+              left: 0.10,
+              top: 0.50,
+              width: 0.60,
+              height: 0.04),
+        ];
+      }
+      return [
+        OcrBlock(
+            text: 'Lightning Bolt',
+            left: 0.05,
+            top: 0.05,
+            width: 0.60,
+            height: 0.06),
+        OcrBlock(
+            text: '2xm 137',
+            left: 0.05,
+            top: 0.88,
+            width: 0.45,
+            height: 0.05),
+      ];
+    });
+    final captured = <ParsedOcr>[];
+    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+        .thenAnswer((inv) async {
+      captured.add(inv.positionalArguments.first as ParsedOcr);
+      return _card();
+    });
+
+    // Encode a real PNG from the `image` package so decodeImage + copyRotate
+    // roundtrip cleanly regardless of platform.
+    final tinyImg = img.Image(width: 64, height: 64);
+    final tinyPng = Uint8List.fromList(img.encodePng(tinyImg));
+
+    await pipeline().captureFromWarpedCrop(tinyPng, forceFoil: false);
+
+    expect(call, greaterThanOrEqualTo(3),
+        reason:
+            'new code must make at least 3 OCR calls (original + 2 rotations) '
+            'before the upright blocks at call 3 are accepted');
+    expect(captured.single.rawName, 'Lightning Bolt');
   });
 
   test('pickName tiebreaks near-equal heights by proximity to left edge',
