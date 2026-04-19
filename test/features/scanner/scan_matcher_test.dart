@@ -134,7 +134,12 @@ void main() {
     expect(r!.name, 'Lightning Bolt');
   });
 
-  test('autocomplete rescue falls back to fuzzy when no cn candidates', () async {
+  test('autocomplete rescue fuzzy-branch runs without cn but scoring rejects '
+      'low-confidence result', () async {
+    // With no cn/set signal and a noisy OCR name, the autocomplete-rescued
+    // card only contributes its name similarity to the score. Under the
+    // scoring semantics, 0.5 * nameSim alone caps at 0.5 — so a noisy
+    // autocomplete rescue is intentionally rejected as low confidence.
     when(() => scry.cardByFuzzyName('Lghtning Blt'))
         .thenThrow(ScryfallNotFound('fuzzy'));
     when(() => scry.autocomplete('Lghtning Blt'))
@@ -144,7 +149,10 @@ void main() {
 
     final r = await matcher
         .match(ParsedOcr.from(rawName: 'Lghtning Blt', rawSetCollector: ''));
-    expect(r, isNotNull);
+    // Verify the cn-less branch was taken (fuzzy on the suggestion).
+    verify(() => scry.cardByFuzzyName('Lightning Bolt')).called(1);
+    // Low-confidence result gets rejected.
+    expect(r, isNull);
   });
 
   test('returns null when name empty and no set+collector', () async {
@@ -173,5 +181,62 @@ void main() {
           .match(ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: '')),
       throwsA(isA<ScryfallException>()),
     );
+  });
+
+  test('scoring prefers name+cn+set match over a first-hit with wrong printing',
+      () async {
+    // name+cn returns two hits: the first has a wrong set, the second agrees
+    // with the OCR'd set code. Old behavior: first-hit wins. New behavior:
+    // score picks the set-matching one.
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
+        .thenAnswer((_) async => [
+              _card(set: 'dmr', cn: '137'),
+              _card(set: '2xm', cn: '137'),
+            ]);
+    final r = await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
+    expect(r, isNotNull);
+    expect(r!.set, '2xm');
+  });
+
+  test('scoring short-circuits at >= 0.95 and skips later lookup paths',
+      () async {
+    when(() => scry.cardsByNameAndCollectorNumber('Lightning Bolt', '137'))
+        .thenAnswer((_) async => [_card(set: '2xm', cn: '137')]);
+    // These should never be called.
+    when(() => scry.cardBySetAndNumber(any(), any()))
+        .thenAnswer((_) async => _card(set: 'dmr', cn: '137'));
+    when(() => scry.cardByFuzzyName(any()))
+        .thenAnswer((_) async => _card(set: 'dmr', cn: '999'));
+
+    await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: '2xm 137'));
+
+    verifyNever(() => scry.cardBySetAndNumber(any(), any()));
+    verifyNever(() => scry.cardByFuzzyName(any()));
+  });
+
+  test('returns null when best candidate scores below threshold', () async {
+    // OCR'd something totally unrelated; every path returns a card with low
+    // name similarity. Threshold 0.5 -> null.
+    when(() => scry.cardsByNameAndCollectorNumber(any(), any()))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardBySetAndNumber(any(), any()))
+        .thenThrow(ScryfallNotFound('na'));
+    when(() => scry.cardByFuzzyName('xyzzy nonexistent'))
+        .thenAnswer((_) async => ScryfallCard(
+              id: 'sid-irr',
+              name: 'A Completely Different Card Name',
+              set: 'zzz',
+              setName: 'Z',
+              collectorNumber: '999',
+              rarity: 'common',
+              prices: ScryfallPrices(usd: 0.05),
+            ));
+
+    final r = await matcher.match(ParsedOcr.from(
+        rawName: 'xyzzy nonexistent', rawSetCollector: ''));
+
+    expect(r, isNull);
   });
 }

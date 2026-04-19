@@ -11,153 +11,186 @@ class ScanMatcher {
   /// so we limit this to keep failing scans from stalling the UI.
   final int maxAutocompleteRetries;
 
-  /// Resolves parsed OCR to a Scryfall card.
+  static const double _shortCircuitScore = 0.95;
+  static const double _acceptThreshold = 0.5;
+
+  /// Resolves parsed OCR to a Scryfall card by gathering candidates across
+  /// lookup paths and returning the highest-scoring one.
   ///
-  /// Lookup order:
+  /// Scoring weights: 0.5 * name similarity + 0.3 * cn match + 0.2 * set match.
+  /// A candidate scoring >= 0.95 short-circuits the remaining paths.
+  /// Final result must clear 0.5 or `null` is returned.
+  ///
+  /// Lookup order (same as before, just feeds into a scored pool now):
   /// 1. name + each candidate collector number.
-  /// 2. set code + primary collector number.
+  /// 2. plst / set + primary collector number.
   /// 3. fuzzy name.
-  /// 4. autocomplete rescue: when the OCR'd name is close-but-not-exact
-  ///    (retro / showcase / full-art frames are notorious for this), retry
-  ///    name+cn against each autocomplete suggestion.
+  /// 4. printings-of-name walk.
+  /// 5. autocomplete rescue.
   ///
-  /// Returns `null` when every lookup comes up empty. Throws [ScryfallException]
-  /// on network/API errors so callers can treat them as "offline".
+  /// Throws [ScryfallException] on network/API errors so callers can treat
+  /// them as "offline".
   Future<ScryfallCard?> match(ParsedOcr parsed, {bool isListCard = false}) async {
     final name = parsed.name;
     final candidates = parsed.collectorNumberCandidates;
+    final pool = <ScryfallCard>[];
+    ScryfallCard? best;
+    double bestScore = -1.0;
 
-    if (name.isNotEmpty) {
-      for (final cn in candidates) {
-        final hits = await scry.cardsByNameAndCollectorNumber(name, cn);
-        if (hits.isEmpty) continue;
-        if (parsed.setCode != null) {
-          // Basic lands and reprints produce many name+cn hits across sets
-          // (Mountain 280 in DMU vs MOM). Prefer one whose set matches the
-          // OCR'd set code; if none match, skip this cn and let the set+cn
-          // path attempt a direct lookup rather than returning the wrong
-          // most-recent printing.
-          final setMatch = hits.where(
-              (c) => c.set.toUpperCase() == parsed.setCode).toList();
-          if (setMatch.isNotEmpty) return setMatch.first;
-          continue;
+    void consider(Iterable<ScryfallCard> cards) {
+      for (final c in cards) {
+        pool.add(c);
+        final s = _scoreCandidate(c, parsed);
+        if (s > bestScore) {
+          bestScore = s;
+          best = c;
         }
-        return hits.first;
       }
     }
 
+    bool done() => bestScore >= _shortCircuitScore;
+
+    // Path 1: name + each candidate collector number.
+    if (name.isNotEmpty) {
+      for (final cn in candidates) {
+        if (done()) break;
+        final hits = await scry.cardsByNameAndCollectorNumber(name, cn);
+        consider(hits);
+      }
+    }
+
+    // Path 2: The List lookup (only when caller detected the List icon) +
+    // plain set + cn.
     final primaryCn = parsed.collectorNumber;
-    if (parsed.setCode != null && primaryCn != null) {
-      // If the caller detected the Planeswalker List icon in the set-symbol
-      // area, try the plst set first. List cards use "{ORIG_SET}-{CN}" as
-      // their collector number under set code "plst".
+    if (!done() && parsed.setCode != null && primaryCn != null) {
       if (isListCard) {
         try {
           final listCn = '${parsed.setCode!}-$primaryCn'.toLowerCase();
-          final listCard = await scry.cardBySetAndNumber('plst', listCn);
-          if (name.isEmpty || _namesSimilar(name, listCard.name)) {
-            return listCard;
-          }
+          consider([await scry.cardBySetAndNumber('plst', listCn)]);
         } on ScryfallNotFound {
-          // Not on The List — fall through to normal set+cn.
+          // Not on The List — continue.
         }
       }
-      try {
-        final card =
-            await scry.cardBySetAndNumber(parsed.setCode!, primaryCn);
-        if (name.isEmpty || _namesSimilar(name, card.name)) {
-          return card;
+      if (!done()) {
+        try {
+          consider([await scry.cardBySetAndNumber(parsed.setCode!, primaryCn)]);
+        } on ScryfallNotFound {
+          // Continue to fuzzy.
         }
-      } on ScryfallNotFound {
-        // fall through to fuzzy
       }
     }
 
-    if (name.isEmpty) return null;
+    // Path 3: fuzzy name.
     ScryfallCard? fuzzy;
-    try {
-      fuzzy = await scry.cardByFuzzyName(name);
-    } on ScryfallNotFound {
-      fuzzy = null;
+    if (!done() && name.isNotEmpty) {
+      try {
+        fuzzy = await scry.cardByFuzzyName(name);
+        consider([fuzzy]);
+      } on ScryfallNotFound {
+        fuzzy = null;
+      }
     }
 
-    if (fuzzy != null && candidates.isEmpty) return fuzzy;
-
-    // If fuzzy already returned a printing whose cn matches an OCR
-    // candidate, trust it — no printings walk needed.
-    if (fuzzy != null &&
-        fuzzy.name.toLowerCase() == name.toLowerCase() &&
-        candidates.contains(fuzzy.collectorNumber.toLowerCase())) {
-      return fuzzy;
-    }
-
-    // Fuzzy resolved the name but the OCR'd cn doesn't match fuzzy's
-    // printing. Scan the first page of printings for one whose cn agrees.
-    // Bounded to one page — unbounded pagination on heavy-reprint cards
-    // (Mountain has 200+ printings) blows the match timeout.
-    if (fuzzy != null && candidates.isNotEmpty) {
+    // Path 4: printings-of-name walk (only when fuzzy resolved and we have
+    // cn candidates that disagree with fuzzy's printing — same heuristic as
+    // before, just feeding the candidate pool instead of returning early).
+    if (!done() && fuzzy != null && candidates.isNotEmpty) {
       try {
         final printings =
             await scry.printingsOfName(fuzzy.name, maxPages: 1);
         for (final cn in candidates) {
-          final match = printings
-              .where((p) => p.collectorNumber.toLowerCase() == cn)
-              .toList();
-          if (match.isNotEmpty) return match.first;
+          final matching = printings.where(
+              (p) => p.collectorNumber.toLowerCase() == cn);
+          consider(matching);
+          if (done()) break;
         }
       } on ScryfallException {
-        // Fall through — return fuzzy as-is.
+        // Best-effort — skip.
       }
-      return fuzzy;
     }
 
-    // Exact name match with no cn — fuzzy is as good as it gets.
-    if (fuzzy != null &&
-        fuzzy.name.toLowerCase() == name.toLowerCase()) {
-      return fuzzy;
-    }
-
-    // Autocomplete rescue — only runs when no exact match landed. When we do
-    // have candidate cn values, prefer a suggestion whose cn matches the OCR;
-    // otherwise fall back to fuzzy on the best suggestion.
-    try {
-      final suggestions = await scry.autocomplete(name);
-      final tried = <String>{name.toLowerCase()};
-      var attempts = 0;
-      for (final s in suggestions) {
-        if (attempts >= maxAutocompleteRetries) break;
-        final key = s.toLowerCase();
-        if (!tried.add(key)) continue;
-        attempts++;
-        if (candidates.isNotEmpty) {
-          for (final cn in candidates) {
-            final hits = await scry.cardsByNameAndCollectorNumber(s, cn);
-            if (hits.isNotEmpty) return hits.first;
-          }
-        } else {
-          try {
-            return await scry.cardByFuzzyName(s);
-          } on ScryfallNotFound {
-            // next suggestion
+    // Path 5: autocomplete rescue.
+    if (!done() && name.isNotEmpty) {
+      try {
+        final suggestions = await scry.autocomplete(name);
+        final tried = <String>{name.toLowerCase()};
+        var attempts = 0;
+        for (final s in suggestions) {
+          if (done() || attempts >= maxAutocompleteRetries) break;
+          final key = s.toLowerCase();
+          if (!tried.add(key)) continue;
+          attempts++;
+          if (candidates.isNotEmpty) {
+            for (final cn in candidates) {
+              if (done()) break;
+              final hits = await scry.cardsByNameAndCollectorNumber(s, cn);
+              consider(hits);
+            }
+          } else {
+            try {
+              consider([await scry.cardByFuzzyName(s)]);
+            } on ScryfallNotFound {
+              // next suggestion
+            }
           }
         }
+      } on ScryfallException {
+        // Autocomplete is best-effort.
       }
-    } on ScryfallException {
-      // Autocomplete is a best-effort rescue; don't let its failure mask the
-      // fuzzy result we already have.
     }
 
-    return fuzzy;
+    if (pool.isEmpty) return null;
+    if (bestScore >= _acceptThreshold) return best;
+    return null;
   }
 
-  /// Quick sanity check: do the OCR'd name and the card name share at least
-  /// one meaningful word? Catches obvious mismatches like "Lavaborn Muse" vs
-  /// "Goblin Hero" without requiring a full edit-distance computation.
-  static bool _namesSimilar(String ocrName, String cardName) {
-    final ocrWords = ocrName.toLowerCase().split(RegExp(r'[\s,]+'))
-      ..removeWhere((w) => w.length < 3);
-    final cardWords = cardName.toLowerCase().split(RegExp(r'[\s,]+'))
-      ..removeWhere((w) => w.length < 3);
-    return ocrWords.any(cardWords.contains);
+  double _scoreCandidate(ScryfallCard card, ParsedOcr parsed) {
+    final nameSim = _nameSimilarity(parsed.name, card.name);
+    final cnMatch = parsed.collectorNumberCandidates.any(
+            (cn) => cn.toLowerCase() == card.collectorNumber.toLowerCase())
+        ? 1.0
+        : 0.0;
+    final setMatch = (parsed.setCode != null &&
+            card.set.toUpperCase() == parsed.setCode!.toUpperCase())
+        ? 1.0
+        : 0.0;
+    return 0.5 * nameSim + 0.3 * cnMatch + 0.2 * setMatch;
   }
+
+  static final _nonAlphaNum = RegExp(r'[^a-z0-9 ]');
+
+  /// Normalized Levenshtein similarity, 0..1 (1 = identical).
+  static double _nameSimilarity(String a, String b) {
+    final na = a.toLowerCase().replaceAll(_nonAlphaNum, '').trim();
+    final nb = b.toLowerCase().replaceAll(_nonAlphaNum, '').trim();
+    if (na.isEmpty && nb.isEmpty) return 1.0;
+    if (na.isEmpty || nb.isEmpty) return 0.0;
+    final dist = _levenshtein(na, nb);
+    final longest = na.length > nb.length ? na.length : nb.length;
+    return 1.0 - dist / longest;
+  }
+
+  static int _levenshtein(String a, String b) {
+    final m = a.length;
+    final n = b.length;
+    if (m == 0) return n;
+    if (n == 0) return m;
+    var prev = List<int>.generate(n + 1, (i) => i);
+    var curr = List<int>.filled(n + 1, 0);
+    for (var i = 1; i <= m; i++) {
+      curr[0] = i;
+      for (var j = 1; j <= n; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        final del = prev[j] + 1;
+        final ins = curr[j - 1] + 1;
+        final sub = prev[j - 1] + cost;
+        curr[j] = del < ins ? (del < sub ? del : sub) : (ins < sub ? ins : sub);
+      }
+      final tmp = prev;
+      prev = curr;
+      curr = tmp;
+    }
+    return prev[n];
+  }
+
 }
