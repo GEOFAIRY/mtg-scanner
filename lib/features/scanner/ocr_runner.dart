@@ -28,6 +28,12 @@ abstract class OcrRunner {
   Future<void> dispose();
 }
 
+/// Recognize blocks from a PNG byte buffer. Injected into [MlKitOcrRunner] so
+/// unit tests can substitute a fake implementation and ML Kit stays out of
+/// the test graph.
+typedef OcrRecognizer = Future<List<OcrBlock>> Function(
+    Uint8List pngBytes, int imgWidth, int imgHeight);
+
 /// Normalized regions of the card we OCR as focused zoom-ins. Whole-card
 /// OCR misses pixel-tiny text (retro-frame collector numbers, translucent
 /// borderless name banners) because the text is too small relative to the
@@ -42,12 +48,13 @@ const _nameCrop = _FocusCrop(0.02, 0.02, 0.96, 0.18);
 const _setCrop = _FocusCrop(0.02, 0.84, 0.70, 0.14);
 
 class MlKitOcrRunner implements OcrRunner {
-  final TextRecognizer _recognizer =
+  MlKitOcrRunner({OcrRecognizer? recognizer}) {
+    _recognize = recognizer ?? _mlKitRecognize;
+  }
+
+  late final OcrRecognizer _recognize;
+  final TextRecognizer _mlKit =
       TextRecognizer(script: TextRecognitionScript.latin);
-  // A single reusable scratch file instead of a new file-per-pass with a
-  // microsecondsSinceEpoch + identityHashCode filename. OCR passes run
-  // sequentially within a single captureFromWarpedCrop call, so there's no
-  // concurrent-access concern and we skip the create + delete cycle.
   late final File _scratch =
       File('${Directory.systemTemp.path}/mtg_scanner_ocr.png');
 
@@ -58,28 +65,31 @@ class MlKitOcrRunner implements OcrRunner {
 
     final results = <List<OcrBlock>>[];
 
-    // Pass 1: whole card, raw — ML Kit handles standard frames best without
-    // preprocessing that can blow out translucent banners.
-    results.add(await _run(imageBytes, decoded.width, decoded.height));
+    // Pass 1: whole card, raw.
+    final pass1 =
+        await _recognize(imageBytes, decoded.width, decoded.height);
+    results.add(pass1);
 
-    // Early-exit: if pass 1 already found both a plausible name block and a
-    // plausible set/cn block, the later three passes are redundant work.
-    // Standard-frame cards hit this and skip ~1-1.5s of extra OCR.
-    if (_hasConfidentNameAndCn(results.first)) {
+    // Early-exit: if pass 1 found both a plausible name block AND a plausible
+    // set/cn block, later passes are redundant.
+    if (_hasConfidentNameAndCn(pass1)) {
       return _mergeBlocks(results);
     }
 
-    // Pass 2: whole card, gentle grayscale + contrast — rescues low-contrast
-    // frames (full-art, showcase, textured retro).
-    final pp = img.contrast(img.grayscale(decoded), contrast: 125);
-    results.add(await _run(Uint8List.fromList(img.encodePng(pp)),
-        decoded.width, decoded.height));
-
-    // Passes 3 & 4: focused crops for the two regions that carry the match
-    // signal. Running these as zoom-ins gives us full-resolution text in the
-    // exact bands we care about.
+    // Passes 2 + 3: focused crops with OTSU preprocess only. OTSU adapts to
+    // whatever contrast the crop has and usually dominates the fixed-contrast
+    // variant we used to also run.
     results.add(await _focusedPass(decoded, _nameCrop));
     results.add(await _focusedPass(decoded, _setCrop));
+
+    // Pass 4 (conditional): whole-card grayscale + contrast, ONLY when pass 1
+    // returned nothing at all. This is the rescue path for extremely low-
+    // contrast captures where even raw ML Kit fails.
+    if (pass1.isEmpty) {
+      final pp = img.contrast(img.grayscale(decoded), contrast: 125);
+      results.add(await _recognize(Uint8List.fromList(img.encodePng(pp)),
+          decoded.width, decoded.height));
+    }
 
     return _mergeBlocks(results);
   }
@@ -110,42 +120,29 @@ class MlKitOcrRunner implements OcrRunner {
     final h = (crop.height * src.height).round();
     if (w <= 0 || h <= 0) return const [];
     final rawCrop = img.copyCrop(src, x: x, y: y, width: w, height: h);
-
-    // Run two variants of the focused crop and merge:
-    // 1. Grayscale + contrast — the original approach.
-    // 2. Grayscale + OTSU binarization — adapts to whatever contrast the
-    //    crop has and produces clean black/white that ML Kit reads well on
-    //    retro tan banners and borderless translucent overlays alike.
-    final results = <List<OcrBlock>>[];
-    for (final preprocess in [_contrastPreprocess, _otsuPreprocess]) {
-      var region = preprocess(rawCrop);
-      if (region.width < 600) {
-        final scale = 600 / region.width;
-        region = img.copyResize(region,
-            width: 600,
-            height: (region.height * scale).round(),
-            interpolation: img.Interpolation.cubic);
-      }
-      final blocks = await _run(
-          Uint8List.fromList(img.encodePng(region)),
-          region.width,
-          region.height);
-      results.add([
-        for (final b in blocks)
-          OcrBlock(
-            text: b.text,
-            left: crop.left + b.left * crop.width,
-            top: crop.top + b.top * crop.height,
-            width: b.width * crop.width,
-            height: b.height * crop.height,
-          ),
-      ]);
+    var region = _otsuPreprocess(rawCrop);
+    if (region.width < 600) {
+      final scale = 600 / region.width;
+      region = img.copyResize(region,
+          width: 600,
+          height: (region.height * scale).round(),
+          interpolation: img.Interpolation.cubic);
     }
-    return _mergeBlocks(results);
+    final blocks = await _recognize(
+        Uint8List.fromList(img.encodePng(region)),
+        region.width,
+        region.height);
+    return [
+      for (final b in blocks)
+        OcrBlock(
+          text: b.text,
+          left: crop.left + b.left * crop.width,
+          top: crop.top + b.top * crop.height,
+          width: b.width * crop.width,
+          height: b.height * crop.height,
+        ),
+    ];
   }
-
-  static img.Image _contrastPreprocess(img.Image src) =>
-      img.contrast(img.grayscale(img.Image.from(src)), contrast: 135);
 
   static img.Image _otsuPreprocess(img.Image src) {
     final gray = img.grayscale(img.Image.from(src));
@@ -188,11 +185,11 @@ class MlKitOcrRunner implements OcrRunner {
     return gray;
   }
 
-  Future<List<OcrBlock>> _run(
+  Future<List<OcrBlock>> _mlKitRecognize(
       Uint8List pngBytes, int imgW, int imgH) async {
     await _scratch.writeAsBytes(pngBytes, flush: true);
     final input = InputImage.fromFilePath(_scratch.path);
-    final result = await _recognizer.processImage(input);
+    final result = await _mlKit.processImage(input);
     final w = imgW.toDouble();
     final h = imgH.toDouble();
     if (w <= 0 || h <= 0) return const [];
@@ -226,7 +223,7 @@ class MlKitOcrRunner implements OcrRunner {
 
   @override
   Future<void> dispose() async {
-    await _recognizer.close();
+    await _mlKit.close();
     try {
       if (await _scratch.exists()) await _scratch.delete();
     } catch (_) {
