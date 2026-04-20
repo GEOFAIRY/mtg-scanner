@@ -56,6 +56,13 @@ void main() {
     registerFallbackValue(Uint8List(0));
     registerFallbackValue(
         ParsedOcr.from(rawName: '', rawSetCollector: ''));
+    registerFallbackValue(Future<ScryfallCard?>.value(null));
+    // Speculative-fuzzy support: pipeline calls matcher.scry.cardByFuzzyName
+    // directly. Expose the fake scry through the fake matcher, and default
+    // the fuzzy call to a 404 so individual tests don't have to care.
+    when(() => matcher.scry).thenReturn(scry);
+    when(() => scry.cardByFuzzyName(any()))
+        .thenThrow(ScryfallNotFound('fuzzy'));
   });
   tearDown(() async {
     await db.close();
@@ -81,7 +88,10 @@ void main() {
 
   test('matched outcome adds to collection and returns id + price', () async {
     stubOcr();
-    when(() => matcher.match(any())).thenAnswer((_) async => _card());
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async => _card());
 
     final res =
         await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
@@ -99,8 +109,10 @@ void main() {
 
   test('matched outcome with forceFoil picks foil price', () async {
     stubOcr();
-    when(() => matcher.match(any())).thenAnswer(
-        (_) async => _card(usd: 1.80, usdFoil: 5.50));
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async => _card(usd: 1.80, usdFoil: 5.50));
 
     final res =
         await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
@@ -112,8 +124,10 @@ void main() {
   test('matched outcome falls back to non-foil when foil price is null',
       () async {
     stubOcr();
-    when(() => matcher.match(any())).thenAnswer(
-        (_) async => _card(usd: 1.80, usdFoil: null));
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async => _card(usd: 1.80, usdFoil: null));
 
     final res =
         await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
@@ -123,7 +137,10 @@ void main() {
 
   test('matched outcome reports wasInsertion=false on second scan', () async {
     stubOcr();
-    when(() => matcher.match(any())).thenAnswer((_) async => _card());
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async => _card());
 
     await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
     final second =
@@ -134,7 +151,10 @@ void main() {
 
   test('no-match outcome inserts nothing', () async {
     stubOcr(name: 'Gibberish', setCol: '');
-    when(() => matcher.match(any())).thenAnswer((_) async => null);
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async => null);
 
     final res =
         await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
@@ -147,7 +167,9 @@ void main() {
 
   test('offline outcome: ScryfallException becomes offline', () async {
     stubOcr();
-    when(() => matcher.match(any()))
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
         .thenThrow(ScryfallException('network down'));
 
     final res =
@@ -160,7 +182,10 @@ void main() {
   test('offline outcome: timeout beyond matchTimeout becomes offline',
       () async {
     stubOcr();
-    when(() => matcher.match(any())).thenAnswer((_) async {
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
+        .thenAnswer((_) async {
       await Future<void>.delayed(const Duration(seconds: 8));
       return null;
     });
@@ -191,7 +216,9 @@ void main() {
               text: 'dmu 125', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
         ]);
     final captured = <ParsedOcr>[];
-    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
         .thenAnswer((inv) async {
       captured.add(inv.positionalArguments.first as ParsedOcr);
       return _card();
@@ -216,7 +243,9 @@ void main() {
               text: 'dmu 125', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
         ]);
     final captured = <ParsedOcr>[];
-    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
         .thenAnswer((inv) async {
       captured.add(inv.positionalArguments.first as ParsedOcr);
       return _card();
@@ -262,7 +291,9 @@ void main() {
       ];
     });
     final captured = <ParsedOcr>[];
-    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
         .thenAnswer((inv) async {
       captured.add(inv.positionalArguments.first as ParsedOcr);
       return _card();
@@ -280,6 +311,40 @@ void main() {
             'new code must make at least 3 OCR calls (original + 2 rotations) '
             'before the upright blocks at call 3 are accepted');
     expect(captured.single.rawName, 'Lightning Bolt');
+  });
+
+  test('pipeline pre-starts a speculative fuzzy query after OCR', () async {
+    // Stub OCR to return a plausible name.
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          OcrBlock(
+              text: 'Lightning Bolt',
+              left: 0.05,
+              top: 0.05,
+              width: 0.60,
+              height: 0.06),
+          OcrBlock(
+              text: '2xm 137',
+              left: 0.05,
+              top: 0.90,
+              width: 0.45,
+              height: 0.05),
+        ]);
+
+    Future<ScryfallCard?>? capturedSpeculative;
+    when(() => matcher.match(any(),
+        isListCard: any(named: 'isListCard'),
+        speculativeFuzzy: any(named: 'speculativeFuzzy'))).thenAnswer((inv) {
+      capturedSpeculative =
+          inv.namedArguments[#speculativeFuzzy] as Future<ScryfallCard?>?;
+      return Future.value(_card());
+    });
+
+    await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+
+    expect(capturedSpeculative, isNotNull,
+        reason:
+            'pipeline should pass a speculative fuzzy future to the matcher '
+            'when OCR returns a plausible name');
   });
 
   test('pickName tiebreaks near-equal heights by proximity to left edge',
@@ -302,7 +367,9 @@ void main() {
               text: '2xm 137', left: 0.05, top: 0.88, width: 0.45, height: 0.05),
         ]);
     final captured = <ParsedOcr>[];
-    when(() => matcher.match(any(), isListCard: any(named: 'isListCard')))
+    when(() => matcher.match(any(),
+            isListCard: any(named: 'isListCard'),
+            speculativeFuzzy: any(named: 'speculativeFuzzy')))
         .thenAnswer((inv) async {
       captured.add(inv.positionalArguments.first as ParsedOcr);
       return _card();

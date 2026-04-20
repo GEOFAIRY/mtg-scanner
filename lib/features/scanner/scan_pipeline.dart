@@ -137,10 +137,20 @@ class ScanPipeline {
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
     final listCard = _detectListIcon(uprightPng);
 
+    // Speculative fuzzy: if OCR produced a plausible name that isn't oracle
+    // text, kick off the Scryfall fuzzy query now. It overlaps with the
+    // list-icon detection + match dispatch, and the matcher's path 3 will
+    // consume its result instead of issuing a duplicate request.
+    Future<ScryfallCard?>? speculative;
+    if (parsed.name.isNotEmpty && !_looksLikeOracleText(parsed.name)) {
+      speculative = _startSpeculativeFuzzy(parsed.name);
+    }
+
     final ScryfallCard? card;
     try {
       card = await matcher
-          .match(parsed, isListCard: listCard)
+          .match(parsed,
+              isListCard: listCard, speculativeFuzzy: speculative)
           .timeout(matchTimeout);
     } on TimeoutException {
       return CaptureResult.offline();
@@ -303,6 +313,16 @@ class ScanPipeline {
     final usdFoil = card.prices.usdFoil;
     if (foil) return usdFoil ?? usd;
     return usd ?? usdFoil;
+  }
+
+  Future<ScryfallCard?> _startSpeculativeFuzzy(String name) async {
+    try {
+      return await matcher.scry.cardByFuzzyName(name);
+    } on ScryfallNotFound {
+      return null;
+    } on ScryfallException {
+      return null;
+    }
   }
 }
 

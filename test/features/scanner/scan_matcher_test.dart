@@ -264,6 +264,32 @@ void main() {
     expect(r!.collectorNumber, '222');
   });
 
+  test('speculative fuzzy future is consumed instead of calling scry again',
+      () async {
+    // Pre-start fuzzy externally — matcher should use its value, not call
+    // scry.cardByFuzzyName a second time.
+    when(() => scry.cardByFuzzyName('Lightning Bolt'))
+        .thenAnswer((_) async => _card(set: 'dmr', cn: '10'));
+
+    // Force path 3 to be reached: name+cn returns empty, set+cn throws.
+    when(() => scry.cardsByNameAndCollectorNumber(any(), any()))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardBySetAndNumber(any(), any()))
+        .thenThrow(ScryfallNotFound('na'));
+
+    final speculative = scry.cardByFuzzyName('Lightning Bolt');
+    // Await it so we know scry has been called exactly once before match runs.
+    await speculative;
+
+    final r = await matcher.match(
+      ParsedOcr.from(rawName: 'Lightning Bolt', rawSetCollector: ''),
+      speculativeFuzzy: speculative,
+    );
+
+    expect(r, isNotNull);
+    verify(() => scry.cardByFuzzyName('Lightning Bolt')).called(1);
+  });
+
   test('set+cn path iterates alternate cn candidates when primary misses',
       () async {
     // OCR'd "WOE 137 222" — primary cn "137" is wrong, "222" is right.

@@ -30,7 +30,11 @@ class ScanMatcher {
   ///
   /// Throws [ScryfallException] on network/API errors so callers can treat
   /// them as "offline".
-  Future<ScryfallCard?> match(ParsedOcr parsed, {bool isListCard = false}) async {
+  Future<ScryfallCard?> match(
+    ParsedOcr parsed, {
+    bool isListCard = false,
+    Future<ScryfallCard?>? speculativeFuzzy,
+  }) async {
     final name = parsed.name;
     final candidates = parsed.collectorNumberCandidates;
     ScryfallCard? best;
@@ -83,12 +87,18 @@ class ScanMatcher {
       }
     }
 
-    // Path 3: fuzzy name.
+    // Path 3: fuzzy name. Prefer the speculative future if one was started
+    // earlier by the pipeline — it's already in flight or complete by now,
+    // overlapping with OCR refinement passes.
     ScryfallCard? fuzzy;
     if (!done() && name.isNotEmpty) {
       try {
-        fuzzy = await scry.cardByFuzzyName(name);
-        consider([fuzzy]);
+        if (speculativeFuzzy != null) {
+          fuzzy = await speculativeFuzzy;
+        } else {
+          fuzzy = await scry.cardByFuzzyName(name);
+        }
+        if (fuzzy != null) consider([fuzzy]);
       } on ScryfallNotFound {
         fuzzy = null;
       }
