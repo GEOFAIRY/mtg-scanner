@@ -19,7 +19,10 @@ import 'features/collection/collection_detail_screen.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/collection/manual_add_screen.dart';
 import 'features/export/export_screen.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 import 'features/scanner/ocr_runner.dart';
+import 'features/scanner/scan_debug_recorder.dart';
 import 'features/scanner/scan_matcher.dart';
 import 'features/scanner/scan_pipeline.dart';
 import 'features/scanner/scanner_screen.dart';
@@ -55,6 +58,7 @@ class Deps {
       ocr: MlKitOcrRunner(),
       matcher: ScanMatcher(scry: scry),
       collection: collection,
+      debugRecorder: kDebugMode ? ScanDebugRecorder() : null,
     );
     // One-time cleanup for the legacy scan_thumbs directory. Older builds
     // wrote a PNG to this dir on every successful scan with no reader and

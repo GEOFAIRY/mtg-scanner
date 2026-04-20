@@ -10,6 +10,7 @@ import '../../data/scryfall/scryfall_models.dart';
 import 'foil_detector.dart';
 import 'ocr_runner.dart';
 import 'parsed_ocr.dart';
+import 'scan_debug_recorder.dart';
 import 'scan_matcher.dart';
 
 enum CaptureOutcome { matched, noMatch, offline }
@@ -62,12 +63,14 @@ class ScanPipeline {
     required this.matcher,
     required this.collection,
     this.matchTimeout = const Duration(seconds: 6),
+    this.debugRecorder,
   });
 
   final OcrRunner ocr;
   final ScanMatcher matcher;
   final CollectionRepository collection;
   final Duration matchTimeout;
+  final ScanDebugRecorder? debugRecorder;
 
   // Vertical bands where we expect each field. Anything lands in `_nameBand`
   // could be the card name; the winner is the widest block there. Blocks in
@@ -128,6 +131,16 @@ class ScanPipeline {
     } on ScryfallException {
       return CaptureResult.offline();
     }
+
+    // Fire-and-forget: the recorder persists the warp + OCR/match JSON so
+    // scan failures can be diagnosed off-device via `adb pull`. No-op when
+    // no recorder is wired.
+    unawaited(debugRecorder?.record(
+      uprightPng: uprightPng,
+      blocks: blocks,
+      parsed: parsed,
+      matched: card,
+    ) ?? Future<void>.value());
 
     if (card == null) {
       final debugBlockDump = blocks
