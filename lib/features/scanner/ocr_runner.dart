@@ -70,12 +70,16 @@ class MlKitOcrRunner implements OcrRunner {
 
   @override
   Future<List<OcrBlock>> recognizeBlocks(Uint8List imageBytes) async {
+    final probe = img.decodeImage(imageBytes);
+    if (probe == null) return const [];
+    final probeW = probe.width;
+    final probeH = probe.height;
+
     // Passes 1, 2, 3 are independent — run them concurrently and collect.
     // The pass-1 early-exit is removed: any work the extra passes do runs
     // while pass 1 is still in flight, so there's no wall-clock penalty.
-    final pass1F = _recognizeWithScratch(
-        imageBytes, _pass1Scratch, _decodeWidthFor(imageBytes),
-        _decodeHeightFor(imageBytes));
+    final pass1F =
+        _recognizeWithScratch(imageBytes, _pass1Scratch, probeW, probeH);
     final pass2F = _focusedPass(imageBytes, _nameCrop, _pass2Scratch);
     final pass3F = _focusedPass(imageBytes, _setCrop, _pass3Scratch);
 
@@ -87,28 +91,15 @@ class MlKitOcrRunner implements OcrRunner {
     // returned nothing. Rare rescue path; stays sequential because it's only
     // scheduled after pass 1's result is known.
     if (triple[0].isEmpty) {
-      final decoded = img.decodeImage(imageBytes);
-      if (decoded != null) {
-        final pp = img.contrast(img.grayscale(decoded), contrast: 125);
-        results.add(await _recognizeWithScratch(
-            Uint8List.fromList(img.encodePng(pp)),
-            _pass4Scratch,
-            decoded.width,
-            decoded.height));
-      }
+      final pp = img.contrast(img.grayscale(probe), contrast: 125);
+      results.add(await _recognizeWithScratch(
+          Uint8List.fromList(img.encodePng(pp)),
+          _pass4Scratch,
+          probeW,
+          probeH));
     }
 
     return _mergeBlocks(results);
-  }
-
-  int _decodeWidthFor(Uint8List bytes) {
-    final d = img.decodeImage(bytes);
-    return d?.width ?? 0;
-  }
-
-  int _decodeHeightFor(Uint8List bytes) {
-    final d = img.decodeImage(bytes);
-    return d?.height ?? 0;
   }
 
   Future<List<OcrBlock>> _recognizeWithScratch(
