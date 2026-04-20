@@ -8,6 +8,7 @@ import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
 import 'foil_detector.dart';
+import 'image_worker.dart';
 import 'ocr_runner.dart';
 import 'parsed_ocr.dart';
 import 'scan_debug_recorder.dart';
@@ -64,6 +65,7 @@ class ScanPipeline {
     required this.collection,
     this.matchTimeout = const Duration(seconds: 6),
     this.debugRecorder,
+    this.imageWorker,
   });
 
   final OcrRunner ocr;
@@ -71,6 +73,7 @@ class ScanPipeline {
   final CollectionRepository collection;
   final Duration matchTimeout;
   final ScanDebugRecorder? debugRecorder;
+  final ImageWorker? imageWorker;
 
   // Vertical bands where we expect each field. Anything lands in `_nameBand`
   // could be the card name; the winner is the widest block there. Blocks in
@@ -116,21 +119,27 @@ class ScanPipeline {
         hasVerticalStripInNameBand(blocks) ||
         looksLikeBottomStrip(rawName);
     if (needsRotation()) {
-      final decoded = img.decodeImage(uprightPng);
-      if (decoded != null) {
-        for (final angle in const [90, 180, 270]) {
+      for (final angle in const [90, 180, 270]) {
+        final Uint8List rotatedBytes;
+        final worker = imageWorker;
+        if (worker != null) {
+          final r = await worker.rotate(uprightPng, angle);
+          rotatedBytes = r.pngBytes;
+        } else {
+          final decoded = img.decodeImage(uprightPng);
+          if (decoded == null) break;
           final rotated = img.copyRotate(decoded, angle: angle);
-          final rotatedBytes = Uint8List.fromList(img.encodePng(rotated));
-          final rotatedBlocks = await ocr.recognizeBlocks(rotatedBytes);
-          final rotatedName = _pickName(rotatedBlocks);
-          final rotatedSet = _pickSetCollector(rotatedBlocks);
-          if (rotatedName.isNotEmpty && !_looksLikeOracleText(rotatedName)) {
-            uprightPng = rotatedBytes;
-            blocks = rotatedBlocks;
-            rawName = rotatedName;
-            rawSet = rotatedSet;
-            break;
-          }
+          rotatedBytes = Uint8List.fromList(img.encodePng(rotated));
+        }
+        final rotatedBlocks = await ocr.recognizeBlocks(rotatedBytes);
+        final rotatedName = _pickName(rotatedBlocks);
+        final rotatedSet = _pickSetCollector(rotatedBlocks);
+        if (rotatedName.isNotEmpty && !_looksLikeOracleText(rotatedName)) {
+          uprightPng = rotatedBytes;
+          blocks = rotatedBlocks;
+          rawName = rotatedName;
+          rawSet = rotatedSet;
+          break;
         }
       }
     }

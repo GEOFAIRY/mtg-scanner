@@ -21,6 +21,7 @@ import 'features/collection/manual_add_screen.dart';
 import 'features/export/export_screen.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
+import 'features/scanner/image_worker.dart';
 import 'features/scanner/ocr_runner.dart';
 import 'features/scanner/scan_debug_recorder.dart';
 import 'features/scanner/scan_matcher.dart';
@@ -54,11 +55,13 @@ class Deps {
     final db = AppDatabase();
     final scry = ScryfallClient(http.Client());
     final collection = CollectionRepository(db, scry);
+    final imageWorker = await ImageWorker.spawn();
     final pipeline = ScanPipeline(
-      ocr: MlKitOcrRunner(),
+      ocr: MlKitOcrRunner(imageWorker: imageWorker),
       matcher: ScanMatcher(scry: scry),
       collection: collection,
       debugRecorder: kDebugMode ? ScanDebugRecorder() : null,
+      imageWorker: imageWorker,
     );
     // One-time cleanup for the legacy scan_thumbs directory. Older builds
     // wrote a PNG to this dir on every successful scan with no reader and
