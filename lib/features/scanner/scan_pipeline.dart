@@ -233,10 +233,17 @@ class ScanPipeline {
 
   static final _manaCostCharOnly = RegExp(r'^[0-9WUBRGCXYwubrgcxy/{}]+$');
 
+  // Upper bound on a legitimate title block's normalized height. Real
+  // titles are ~4-7% of card height; anything > 15% is flavor / oracle
+  // text stretched by a bad warp (e.g. rect detection latched onto just
+  // the card's text panel instead of its full boundary).
+  static const double _maxTitleHeight = 0.15;
+
   static String _pickName(List<OcrBlock> blocks) {
     final candidates = blocks
         .where((b) =>
             b.top < _nameBandBottom &&
+            b.height < _maxTitleHeight &&
             _hasLetter.hasMatch(b.text) &&
             b.text.trim().length >= 3)
         .toList();

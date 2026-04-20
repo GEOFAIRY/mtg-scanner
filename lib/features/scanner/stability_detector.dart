@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'perspective_correct.dart';
@@ -34,6 +35,12 @@ RectCandidate? detectCardRectOnMat(
 // borderless / full-art cards. We try both and keep the largest quad.
 const _cannyLevels = [(30, 90), (15, 50)];
 
+double _edge(({double x, double y}) a, ({double x, double y}) b) {
+  final dx = a.x - b.x;
+  final dy = a.y - b.y;
+  return math.sqrt(dx * dx + dy * dy);
+}
+
 RectCandidate? _detect(cv.Mat src, {required double minAreaFraction}) {
   final gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
   final blurred = cv.gaussianBlur(gray, (5, 5), 0);
@@ -65,6 +72,17 @@ RectCandidate? _detect(cv.Mat src, {required double minAreaFraction}) {
               final mid = [points[1], points[2]]
                 ..sort((a, b) => a.x.compareTo(b.x));
               final bl = mid.first, tr = mid.last;
+              // Aspect-ratio filter: MTG cards are ~63x88mm (short/long
+              // ≈ 0.72). Reject quads whose avg-edge ratio is far off —
+              // text panels, monitor bezels, and book spines all fail this.
+              // Perspective tilt at reasonable angles stays within the band.
+              final horiz = (_edge(tl, tr) + _edge(bl, br)) / 2.0;
+              final vert = (_edge(tl, bl) + _edge(tr, br)) / 2.0;
+              final shortSide = horiz < vert ? horiz : vert;
+              final longSide = horiz < vert ? vert : horiz;
+              if (longSide <= 0) continue;
+              final ratio = shortSide / longSide;
+              if (ratio < 0.55 || ratio > 0.88) continue;
               best = RectCandidate(CardQuad(tl, tr, br, bl), area);
             } finally {
               approx.dispose();
