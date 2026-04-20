@@ -81,8 +81,10 @@ class ScanPipeline {
   // top border) and the collector line higher; borderless cards vary too.
   // `_setBandTop` lowered from 0.70 after debug captures showed the cn/set
   // strip landing at top=0.68 when the warp quad includes ~10% padding past
-  // the card's bottom edge (common on cluttered backgrounds).
-  static const double _nameBandBottom = 0.20;
+  // the card's bottom edge. `_nameBandBottom` widened from 0.20 → 0.30 to
+  // handle force-scan raw-frame fallback where rect detection failed and
+  // the card sits centered in a larger camera frame with ~20% top padding.
+  static const double _nameBandBottom = 0.30;
   static const double _setBandTop = 0.65;
   static const double _setBandLeftMax = 0.75;
 
@@ -96,12 +98,19 @@ class ScanPipeline {
 
     // Orientation recovery: if the picked name looks like oracle/rules text
     // OR the picker couldn't find a name at all (but blocks exist — meaning
-    // text is there, just not in the expected bands), the warp is likely
+    // text is there, just not in the expected bands) OR any block in the
+    // name band is a vertical strip (width < height — characters stacked,
+    // means text is running sideways in the frame), the warp is likely
     // rotated. Try 90° / 180° / 270° in order and accept the first rotation
     // that yields a non-empty, non-oracle-text name.
+    bool hasVerticalStripInNameBand(List<OcrBlock> bs) => bs.any((b) =>
+        b.top < _nameBandBottom &&
+        b.width > 0 &&
+        b.height > b.width * 1.2);
     bool needsRotation() =>
         _looksLikeOracleText(rawName) ||
-        (rawName.isEmpty && blocks.isNotEmpty);
+        (rawName.isEmpty && blocks.isNotEmpty) ||
+        hasVerticalStripInNameBand(blocks);
     if (needsRotation()) {
       final decoded = img.decodeImage(uprightPng);
       if (decoded != null) {
