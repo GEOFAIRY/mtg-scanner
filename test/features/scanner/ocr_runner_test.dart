@@ -1,9 +1,43 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:mtg_card_scanner/features/scanner/image_worker.dart';
 import 'package:mtg_card_scanner/features/scanner/ocr_runner.dart';
 
 void main() {
+  test('focused pass delegates image prep to the injected worker', () async {
+    final workerCalls = <PrepareOcrRequest>[];
+    final worker = ImageWorker.forTesting((req) async {
+      workerCalls.add(req as PrepareOcrRequest);
+      return ImageWorkerResult(
+        pngBytes: Uint8List.fromList([0xff]),
+        width: 600,
+        height: 900,
+      );
+    });
+
+    final recognizerCalls = <(int, int)>[];
+    final runner = MlKitOcrRunner(
+      imageWorker: worker,
+      recognizer: (bytes, w, h) async {
+        recognizerCalls.add((w, h));
+        return const <OcrBlock>[];
+      },
+    );
+
+    final tinyPng = Uint8List.fromList(
+        img.encodePng(img.Image(width: 750, height: 1050)));
+    await runner.recognizeBlocks(tinyPng);
+
+    // Pass 1 (whole card) uses the original bytes — not a worker call.
+    // Focused name + focused set each submit one worker call.
+    expect(workerCalls.length, 2);
+    expect(workerCalls.every((c) => c.preprocess == PreprocessMode.otsu), isTrue);
+    expect(workerCalls[0].crop, isNotNull);
+    expect(workerCalls[1].crop, isNotNull);
+    await worker.close();
+  });
+
   // Helper: craft a fake recognizer whose per-call outputs are scripted.
   // Each call records the (width, height) it was invoked with so the test
   // can assert which passes ran.

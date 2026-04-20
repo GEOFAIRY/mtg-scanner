@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
+import 'image_worker.dart';
+
 /// A single recognized text block with its bounding box in normalized card
 /// coordinates (0..1 of the input image width/height).
 class OcrBlock {
@@ -48,11 +50,13 @@ const _nameCrop = _FocusCrop(0.02, 0.02, 0.96, 0.18);
 const _setCrop = _FocusCrop(0.02, 0.84, 0.70, 0.14);
 
 class MlKitOcrRunner implements OcrRunner {
-  MlKitOcrRunner({OcrRecognizer? recognizer}) {
+  MlKitOcrRunner({OcrRecognizer? recognizer, ImageWorker? imageWorker})
+      : _imageWorker = imageWorker {
     _recognize = recognizer ?? _mlKitRecognize;
   }
 
   late final OcrRecognizer _recognize;
+  final ImageWorker? _imageWorker;
   final TextRecognizer _mlKit =
       TextRecognizer(script: TextRecognitionScript.latin);
   late final File _scratch =
@@ -60,14 +64,14 @@ class MlKitOcrRunner implements OcrRunner {
 
   @override
   Future<List<OcrBlock>> recognizeBlocks(Uint8List imageBytes) async {
-    final decoded = img.decodeImage(imageBytes);
-    if (decoded == null) return const [];
+    final probe = img.decodeImage(imageBytes);
+    if (probe == null) return const [];
 
     final results = <List<OcrBlock>>[];
 
     // Pass 1: whole card, raw.
     final pass1 =
-        await _recognize(imageBytes, decoded.width, decoded.height);
+        await _recognize(imageBytes, probe.width, probe.height);
     results.add(pass1);
 
     // Early-exit: if pass 1 found both a plausible name block AND a plausible
@@ -79,16 +83,19 @@ class MlKitOcrRunner implements OcrRunner {
     // Passes 2 + 3: focused crops with OTSU preprocess only. OTSU adapts to
     // whatever contrast the crop has and usually dominates the fixed-contrast
     // variant we used to also run.
-    results.add(await _focusedPass(decoded, _nameCrop));
-    results.add(await _focusedPass(decoded, _setCrop));
+    results.add(await _focusedPass(imageBytes, _nameCrop));
+    results.add(await _focusedPass(imageBytes, _setCrop));
 
     // Pass 4 (conditional): whole-card grayscale + contrast, ONLY when pass 1
     // returned nothing at all. This is the rescue path for extremely low-
     // contrast captures where even raw ML Kit fails.
     if (pass1.isEmpty) {
-      final pp = img.contrast(img.grayscale(decoded), contrast: 125);
-      results.add(await _recognize(Uint8List.fromList(img.encodePng(pp)),
-          decoded.width, decoded.height));
+      final decoded = img.decodeImage(imageBytes);
+      if (decoded != null) {
+        final pp = img.contrast(img.grayscale(decoded), contrast: 125);
+        results.add(await _recognize(Uint8List.fromList(img.encodePng(pp)),
+            decoded.width, decoded.height));
+      }
     }
 
     return _mergeBlocks(results);
@@ -113,7 +120,37 @@ class MlKitOcrRunner implements OcrRunner {
   }
 
   Future<List<OcrBlock>> _focusedPass(
-      img.Image src, _FocusCrop crop) async {
+      Uint8List imageBytes, _FocusCrop crop) async {
+    final worker = _imageWorker;
+    if (worker == null) {
+      // No worker wired; fall back to running inline (legacy path — kept for
+      // tests that don't inject a worker).
+      return _focusedPassInline(imageBytes, crop);
+    }
+    final prepared = await worker.prepareOcr(
+      imageBytes,
+      crop: Crop(crop.left, crop.top, crop.width, crop.height),
+      preprocess: PreprocessMode.otsu,
+      minWidth: 600,
+    );
+    final blocks =
+        await _recognize(prepared.pngBytes, prepared.width, prepared.height);
+    return [
+      for (final b in blocks)
+        OcrBlock(
+          text: b.text,
+          left: crop.left + b.left * crop.width,
+          top: crop.top + b.top * crop.height,
+          width: b.width * crop.width,
+          height: b.height * crop.height,
+        ),
+    ];
+  }
+
+  Future<List<OcrBlock>> _focusedPassInline(
+      Uint8List imageBytes, _FocusCrop crop) async {
+    final src = img.decodeImage(imageBytes);
+    if (src == null) return const [];
     final x = (crop.left * src.width).round();
     final y = (crop.top * src.height).round();
     final w = (crop.width * src.width).round();
