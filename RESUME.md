@@ -20,10 +20,10 @@
 - Confidence-tier 0.3 ("low-quality OCR") from spec collapsed to 0.0 — simpler, same UX.
 
 ## Next
-- **Plan A accuracy+perf (2026-04-20): shipped.** Height-ranked multi-line name picker, 90°/180°/270° orientation recovery, OCR pass pruning (up to 6 → 3-4 passes), scored best-match in the matcher (weighted name+cn+set, 0.95 short-circuit, 0.5 accept threshold), 100 ms throttle + 640 px downscale in the frame loop.
-- **Approach B:** Move rect detection and OCR onto a background isolate to get them off the UI thread. Depends on verifying opencv_dart and google_mlkit_text_recognition are isolate-safe.
-- **Approach C:** Ensemble OCR — add a second engine (Tesseract with a Scryfall-derived ~25k-name user-words dictionary) alongside ML Kit, aggregate candidates into the matcher's scoring layer. Design should be informed by on-device failure data gathered during A.
-- **Polish backlog:** tighter OCR name region, retry-on-reconnect for failed lookups, release APK split, icon/branding, stamp-based foil detection (needs reference templates), multi-frame tilt analysis for better foil signal.
+- **Plan A accuracy+perf (2026-04-20): shipped.** Height-ranked multi-line name picker, 90°/180°/270° orientation recovery, OCR pass pruning (up to 6 → 3-4 passes), scored best-match in the matcher (weighted name+cn+set, 0.95 short-circuit, 0.5 accept threshold), 100 ms throttle + 640 px downscale in the frame loop, plus on-device tuning (aspect-ratio rect filter, compound-name stripping, cn-candidate iteration, letter-prefix cn regex, widened name band, vertical-strip rotation trigger, cn-fraction rotation trigger, on-device debug recorder).
+- **Plan B capture latency (2026-04-20): shipped.** Long-lived image worker isolate owns synchronous Dart `image` package ops (decode/crop/OTSU/resize/encode + rotation). OCR passes 1/2/3 run concurrently via `Future.wait` with per-pass scratch files. Speculative Scryfall fuzzy query kicks off after OCR, overlapping list-icon detection + match dispatch; matcher path 3 consumes the pre-started future instead of issuing a duplicate request.
+- **Approach C:** Ensemble OCR — add a second engine (Tesseract with a Scryfall-derived ~25k-name user-words dictionary) alongside ML Kit, aggregate candidates into the matcher's scoring layer. Design should be informed by on-device failure data gathered during A/B.
+- **Polish backlog:** tighter OCR name region, retry-on-reconnect for failed lookups, release APK split, icon/branding, stamp-based foil detection (needs reference templates), multi-frame tilt analysis for better foil signal, thumbnail off the critical path.
 
 ## Environment reminders
 - Invoke Flutter via `cmd.exe /c "powershell -File tool\flutter.ps1 <args>"` from WSL. The wrapper clears the `build\native_assets\windows\sqlite3.dll` lock that otherwise blocks rebuilds.
