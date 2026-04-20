@@ -108,7 +108,7 @@ class MlKitOcrRunner implements OcrRunner {
         _confidentLetter.hasMatch(b.text) &&
         b.text.trim().length >= 3);
     final hasCn = blocks.any((b) =>
-        b.top >= 0.70 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
+        b.top >= 0.65 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
     return hasName && hasCn;
   }
 

@@ -79,8 +79,11 @@ class ScanPipeline {
   // showcase, and retro frames don't line up with a single fixed rectangle.
   // Widened from 0.30/0.78 — retro frames push the name banner lower (thick
   // top border) and the collector line higher; borderless cards vary too.
+  // `_setBandTop` lowered from 0.70 after debug captures showed the cn/set
+  // strip landing at top=0.68 when the warp quad includes ~10% padding past
+  // the card's bottom edge (common on cluttered backgrounds).
   static const double _nameBandBottom = 0.20;
-  static const double _setBandTop = 0.70;
+  static const double _setBandTop = 0.65;
   static const double _setBandLeftMax = 0.75;
 
   Future<CaptureResult> captureFromWarpedCrop(

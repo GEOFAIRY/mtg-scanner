@@ -47,6 +47,19 @@ void main() {
       final r = ParsedOcr.parseSetCollector('SPM 143 C 2024');
       expect(r!.collectorNumber, '143');
     });
+    test('extracts cn from letter-prefix noise like "R O324" (inverted frame)',
+        () {
+      final r = ParsedOcr.parseSetCollector('R O324 FDN EN');
+      expect(r, isNotNull);
+      expect(r!.collectorNumber, '324');
+      expect(r.set, 'FDN');
+    });
+    test('strips leading zeros so "013/063" also exposes "13"', () {
+      final p = ParsedOcr.from(
+          rawName: 'Brainstorm', rawSetCollector: 'STA EN 013/063 R');
+      expect(p.collectorNumberCandidates, ['013', '13']);
+      expect(p.setCode, 'STA');
+    });
   });
 
   group('collectorNumberCandidates', () {
