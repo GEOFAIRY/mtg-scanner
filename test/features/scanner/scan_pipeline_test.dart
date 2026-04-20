@@ -313,8 +313,10 @@ void main() {
     expect(captured.single.rawName, 'Lightning Bolt');
   });
 
-  test('pipeline pre-starts a speculative fuzzy query after OCR', () async {
-    // Stub OCR to return a plausible name.
+  test('pipeline pre-starts a speculative fuzzy query when setCode or cn is missing',
+      () async {
+    // Name-only OCR — no cn/set strip detected. Path 1 / path 2 in matcher
+    // can't fire, so the overlap win from speculation is real.
     when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
           OcrBlock(
               text: 'Lightning Bolt',
@@ -322,12 +324,6 @@ void main() {
               top: 0.05,
               width: 0.60,
               height: 0.06),
-          OcrBlock(
-              text: '2xm 137',
-              left: 0.05,
-              top: 0.90,
-              width: 0.45,
-              height: 0.05),
         ]);
 
     Future<ScryfallCard?>? capturedSpeculative;
@@ -344,7 +340,47 @@ void main() {
     expect(capturedSpeculative, isNotNull,
         reason:
             'pipeline should pass a speculative fuzzy future to the matcher '
-            'when OCR returns a plausible name');
+            'when OCR lacks setCode/cn (path 3 fuzzy will be the primary '
+            'resolver)');
+  });
+
+  test('pipeline skips speculative fuzzy when setCode AND cn are both present',
+      () async {
+    // With all three signals (name + setCode + cn), path 1 in the matcher is
+    // likely to short-circuit at score >= 0.95 — the speculative query would
+    // fire an unused extra Scryfall request. Gate on signal completeness.
+    when(() => ocr.recognizeBlocks(any())).thenAnswer((_) async => [
+          OcrBlock(
+              text: 'Lightning Bolt',
+              left: 0.05,
+              top: 0.05,
+              width: 0.60,
+              height: 0.06),
+          OcrBlock(
+              text: '2xm 137',
+              left: 0.05,
+              top: 0.90,
+              width: 0.45,
+              height: 0.05),
+        ]);
+
+    Future<ScryfallCard?>? capturedSpeculative = Future.value(_card());
+    when(() => matcher.match(any(),
+        isListCard: any(named: 'isListCard'),
+        speculativeFuzzy: any(named: 'speculativeFuzzy'))).thenAnswer((inv) {
+      capturedSpeculative =
+          inv.namedArguments[#speculativeFuzzy] as Future<ScryfallCard?>?;
+      return Future.value(_card());
+    });
+
+    await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: false);
+
+    expect(capturedSpeculative, isNull,
+        reason:
+            'speculative fuzzy should not fire when setCode + cn are both '
+            'present; matcher path 1 will likely short-circuit and the '
+            'speculative HTTP call would be wasted');
+    verifyNever(() => scry.cardByFuzzyName(any()));
   });
 
   test('pickName tiebreaks near-equal heights by proximity to left edge',

@@ -146,12 +146,17 @@ class ScanPipeline {
     final parsed = ParsedOcr.from(rawName: rawName, rawSetCollector: rawSet);
     final listCard = _detectListIcon(uprightPng);
 
-    // Speculative fuzzy: if OCR produced a plausible name that isn't oracle
-    // text, kick off the Scryfall fuzzy query now. It overlaps with the
-    // list-icon detection + match dispatch, and the matcher's path 3 will
-    // consume its result instead of issuing a duplicate request.
+    // Speculative fuzzy: kick off Scryfall fuzzy now so it overlaps with
+    // list-icon detection + matcher dispatch. Only fire when we're actually
+    // missing a signal path 1/2 can use (setCode + primary cn) — with all
+    // three signals present, path 1 usually short-circuits at score >= 0.95
+    // and the speculative HTTP call would be wasted.
     Future<ScryfallCard?>? speculative;
-    if (parsed.name.isNotEmpty && !_looksLikeOracleText(parsed.name)) {
+    final hasStrongSignal =
+        parsed.setCode != null && parsed.collectorNumber != null;
+    if (parsed.name.isNotEmpty &&
+        !_looksLikeOracleText(parsed.name) &&
+        !hasStrongSignal) {
       speculative = _startSpeculativeFuzzy(parsed.name);
     }
 
