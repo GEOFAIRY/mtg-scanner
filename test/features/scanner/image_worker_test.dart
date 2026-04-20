@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:mtg_card_scanner/features/scanner/image_worker.dart';
 
 void main() {
@@ -65,5 +66,38 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
     await w.close();
+  });
+
+  test('spawned worker prepares a real image (otsu, minWidth upscale)',
+      () async {
+    final inPng = Uint8List.fromList(img.encodePng(img.Image(width: 100, height: 200)));
+    final w = await ImageWorker.spawn();
+    try {
+      final r = await w.prepareOcr(
+        inPng,
+        crop: null,
+        preprocess: PreprocessMode.otsu,
+        minWidth: 600,
+      );
+      // minWidth=600 upscales the input from 100px → 600px wide.
+      expect(r.width, 600);
+      expect(r.height, 1200);
+      expect(r.pngBytes.isNotEmpty, isTrue);
+    } finally {
+      await w.close();
+    }
+  });
+
+  test('spawned worker rotates a real image', () async {
+    final inPng = Uint8List.fromList(img.encodePng(img.Image(width: 100, height: 200)));
+    final w = await ImageWorker.spawn();
+    try {
+      final r = await w.rotate(inPng, 90);
+      // 90° rotation swaps dims.
+      expect(r.width, 200);
+      expect(r.height, 100);
+    } finally {
+      await w.close();
+    }
   });
 }
