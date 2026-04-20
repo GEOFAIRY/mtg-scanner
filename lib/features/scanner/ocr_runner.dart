@@ -59,73 +59,76 @@ class MlKitOcrRunner implements OcrRunner {
   final ImageWorker? _imageWorker;
   final TextRecognizer _mlKit =
       TextRecognizer(script: TextRecognitionScript.latin);
-  late final File _scratch =
-      File('${Directory.systemTemp.path}/mtg_scanner_ocr.png');
+  late final File _pass1Scratch =
+      File('${Directory.systemTemp.path}/mtg_scanner_ocr_pass1.png');
+  late final File _pass2Scratch =
+      File('${Directory.systemTemp.path}/mtg_scanner_ocr_pass2.png');
+  late final File _pass3Scratch =
+      File('${Directory.systemTemp.path}/mtg_scanner_ocr_pass3.png');
+  late final File _pass4Scratch =
+      File('${Directory.systemTemp.path}/mtg_scanner_ocr_pass4.png');
 
   @override
   Future<List<OcrBlock>> recognizeBlocks(Uint8List imageBytes) async {
-    final probe = img.decodeImage(imageBytes);
-    if (probe == null) return const [];
+    // Passes 1, 2, 3 are independent — run them concurrently and collect.
+    // The pass-1 early-exit is removed: any work the extra passes do runs
+    // while pass 1 is still in flight, so there's no wall-clock penalty.
+    final pass1F = _recognizeWithScratch(
+        imageBytes, _pass1Scratch, _decodeWidthFor(imageBytes),
+        _decodeHeightFor(imageBytes));
+    final pass2F = _focusedPass(imageBytes, _nameCrop, _pass2Scratch);
+    final pass3F = _focusedPass(imageBytes, _setCrop, _pass3Scratch);
 
     final results = <List<OcrBlock>>[];
-
-    // Pass 1: whole card, raw.
-    final pass1 =
-        await _recognize(imageBytes, probe.width, probe.height);
-    results.add(pass1);
-
-    // Early-exit: if pass 1 found both a plausible name block AND a plausible
-    // set/cn block, later passes are redundant.
-    if (_hasConfidentNameAndCn(pass1)) {
-      return _mergeBlocks(results);
-    }
-
-    // Passes 2 + 3: focused crops with OTSU preprocess only. OTSU adapts to
-    // whatever contrast the crop has and usually dominates the fixed-contrast
-    // variant we used to also run.
-    results.add(await _focusedPass(imageBytes, _nameCrop));
-    results.add(await _focusedPass(imageBytes, _setCrop));
+    final triple = await Future.wait([pass1F, pass2F, pass3F]);
+    results.addAll(triple);
 
     // Pass 4 (conditional): whole-card grayscale + contrast, ONLY when pass 1
-    // returned nothing at all. This is the rescue path for extremely low-
-    // contrast captures where even raw ML Kit fails.
-    if (pass1.isEmpty) {
+    // returned nothing. Rare rescue path; stays sequential because it's only
+    // scheduled after pass 1's result is known.
+    if (triple[0].isEmpty) {
       final decoded = img.decodeImage(imageBytes);
       if (decoded != null) {
         final pp = img.contrast(img.grayscale(decoded), contrast: 125);
-        results.add(await _recognize(Uint8List.fromList(img.encodePng(pp)),
-            decoded.width, decoded.height));
+        results.add(await _recognizeWithScratch(
+            Uint8List.fromList(img.encodePng(pp)),
+            _pass4Scratch,
+            decoded.width,
+            decoded.height));
       }
     }
 
     return _mergeBlocks(results);
   }
 
-  static final _confidentLetter = RegExp(r'[A-Za-z]');
-  static final _confidentDigit = RegExp(r'\d');
+  int _decodeWidthFor(Uint8List bytes) {
+    final d = img.decodeImage(bytes);
+    return d?.width ?? 0;
+  }
 
-  /// A "confident" pass-1 result has at least one top-band block with
-  /// letters (probable name) AND at least one bottom-left block with
-  /// digits (probable collector number). Thresholds match
-  /// ScanPipeline._pickName / _pickSetCollector so the early-exit gate
-  /// doesn't disagree with the pipeline's picker.
-  static bool _hasConfidentNameAndCn(List<OcrBlock> blocks) {
-    final hasName = blocks.any((b) =>
-        b.top < 0.20 &&
-        _confidentLetter.hasMatch(b.text) &&
-        b.text.trim().length >= 3);
-    final hasCn = blocks.any((b) =>
-        b.top >= 0.65 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
-    return hasName && hasCn;
+  int _decodeHeightFor(Uint8List bytes) {
+    final d = img.decodeImage(bytes);
+    return d?.height ?? 0;
+  }
+
+  Future<List<OcrBlock>> _recognizeWithScratch(
+      Uint8List pngBytes, File scratch, int imgW, int imgH) {
+    // If the default ML Kit recognizer is active, route through the scratch
+    // variant. Otherwise the injected test recognizer doesn't care about the
+    // scratch path.
+    if (identical(_recognize, _mlKitRecognize)) {
+      return _mlKitRecognizeWithScratch(pngBytes, scratch, imgW, imgH);
+    }
+    return _recognize(pngBytes, imgW, imgH);
   }
 
   Future<List<OcrBlock>> _focusedPass(
-      Uint8List imageBytes, _FocusCrop crop) async {
+      Uint8List imageBytes, _FocusCrop crop, File scratch) async {
     final worker = _imageWorker;
     if (worker == null) {
       // No worker wired; fall back to running inline (legacy path — kept for
       // tests that don't inject a worker).
-      return _focusedPassInline(imageBytes, crop);
+      return _focusedPassInline(imageBytes, crop, scratch);
     }
     final prepared = await worker.prepareOcr(
       imageBytes,
@@ -133,8 +136,8 @@ class MlKitOcrRunner implements OcrRunner {
       preprocess: PreprocessMode.otsu,
       minWidth: 600,
     );
-    final blocks =
-        await _recognize(prepared.pngBytes, prepared.width, prepared.height);
+    final blocks = await _recognizeWithScratch(
+        prepared.pngBytes, scratch, prepared.width, prepared.height);
     return [
       for (final b in blocks)
         OcrBlock(
@@ -148,7 +151,7 @@ class MlKitOcrRunner implements OcrRunner {
   }
 
   Future<List<OcrBlock>> _focusedPassInline(
-      Uint8List imageBytes, _FocusCrop crop) async {
+      Uint8List imageBytes, _FocusCrop crop, File scratch) async {
     final src = img.decodeImage(imageBytes);
     if (src == null) return const [];
     final x = (crop.left * src.width).round();
@@ -165,8 +168,9 @@ class MlKitOcrRunner implements OcrRunner {
           height: (region.height * scale).round(),
           interpolation: img.Interpolation.cubic);
     }
-    final blocks = await _recognize(
+    final blocks = await _recognizeWithScratch(
         Uint8List.fromList(img.encodePng(region)),
+        scratch,
         region.width,
         region.height);
     return [
@@ -224,8 +228,13 @@ class MlKitOcrRunner implements OcrRunner {
 
   Future<List<OcrBlock>> _mlKitRecognize(
       Uint8List pngBytes, int imgW, int imgH) async {
-    await _scratch.writeAsBytes(pngBytes, flush: true);
-    final input = InputImage.fromFilePath(_scratch.path);
+    return _mlKitRecognizeWithScratch(pngBytes, _pass1Scratch, imgW, imgH);
+  }
+
+  Future<List<OcrBlock>> _mlKitRecognizeWithScratch(
+      Uint8List pngBytes, File scratch, int imgW, int imgH) async {
+    await scratch.writeAsBytes(pngBytes, flush: true);
+    final input = InputImage.fromFilePath(scratch.path);
     final result = await _mlKit.processImage(input);
     final w = imgW.toDouble();
     final h = imgH.toDouble();
@@ -261,10 +270,12 @@ class MlKitOcrRunner implements OcrRunner {
   @override
   Future<void> dispose() async {
     await _mlKit.close();
-    try {
-      if (await _scratch.exists()) await _scratch.delete();
-    } catch (_) {
-      // Best-effort cleanup — ignored.
+    for (final f in [_pass1Scratch, _pass2Scratch, _pass3Scratch, _pass4Scratch]) {
+      try {
+        if (await f.exists()) await f.delete();
+      } catch (_) {
+        // Best-effort cleanup.
+      }
     }
   }
 }
