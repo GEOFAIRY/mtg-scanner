@@ -107,8 +107,14 @@ class MlKitOcrRunner implements OcrRunner {
         b.top < 0.20 &&
         _confidentLetter.hasMatch(b.text) &&
         b.text.trim().length >= 3);
+    // Early-exit: require cn-ish digits from a block in the actual bottom
+    // strip (top >= 0.85), NOT from flavor text that happens to contain
+    // numbers. The set-band picker (top >= 0.65) is intentionally wider so
+    // it can catch cn lines in padded warps, but the early-exit check has
+    // to be stricter — otherwise flavor like "plate 106, passage 27"
+    // short-circuits pass 1 and we skip the focused bottom-strip crop.
     final hasCn = blocks.any((b) =>
-        b.top >= 0.65 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
+        b.top >= 0.85 && b.left < 0.75 && _confidentDigit.hasMatch(b.text));
     return hasName && hasCn;
   }
 
