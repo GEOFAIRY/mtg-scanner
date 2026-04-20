@@ -86,22 +86,30 @@ class ImageWorker {
 
   static Future<ImageWorker> spawn() async {
     final receivePort = ReceivePort();
-    final readyCompleter = Completer<SendPort>();
-    final isolate = await Isolate.spawn(_workerEntry, receivePort.sendPort);
-    // Single listener handles both the initial SendPort handshake and all
-    // subsequent worker responses. ReceivePort is single-subscription, so we
-    // can't listen twice.
-    late final ImageWorker worker;
-    receivePort.listen((m) {
-      if (!readyCompleter.isCompleted && m is SendPort) {
-        readyCompleter.complete(m);
-        return;
-      }
-      worker._onWorkerMessage(m);
-    });
-    final sendPort = await readyCompleter.future;
-    worker = ImageWorker._real(sendPort, receivePort, isolate);
-    return worker;
+    try {
+      final readyCompleter = Completer<SendPort>();
+      // Single listener handles both the initial SendPort handshake and all
+      // subsequent worker responses. ReceivePort is single-subscription, so we
+      // can't listen twice.
+      late final ImageWorker worker;
+      receivePort.listen((m) {
+        if (!readyCompleter.isCompleted && m is SendPort) {
+          readyCompleter.complete(m);
+          return;
+        }
+        worker._onWorkerMessage(m);
+      });
+      final isolate = await Isolate.spawn(_workerEntry, receivePort.sendPort);
+      final sendPort = await readyCompleter.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        throw StateError('worker handshake timed out');
+      });
+      worker = ImageWorker._real(sendPort, receivePort, isolate);
+      return worker;
+    } catch (_) {
+      receivePort.close();
+      rethrow;
+    }
   }
 
   Future<ImageWorkerResult> prepareOcr(
@@ -165,10 +173,6 @@ class ImageWorker {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    final sendPort = _sendPort;
-    if (sendPort != null) {
-      sendPort.send({'op': 'close'});
-    }
     _isolate?.kill(priority: Isolate.immediate);
     _receivePort?.close();
     for (final c in _pending.values) {
@@ -214,11 +218,6 @@ void _workerEntry(SendPort hostSendPort) {
   hostSendPort.send(port.sendPort);
   port.listen((msg) {
     if (msg is! Map) return;
-    final op = msg['op'] as String?;
-    if (op == 'close') {
-      port.close();
-      return;
-    }
     final id = msg['id'] as int?;
     if (id == null) return;
     try {
