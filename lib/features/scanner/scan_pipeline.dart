@@ -107,10 +107,14 @@ class ScanPipeline {
         b.top < _nameBandBottom &&
         b.width > 0 &&
         b.height > b.width * 1.2);
+    // Picked name contains a collector-number fraction like `269/271`: the
+    // card is upside-down and we grabbed the bottom strip as the title.
+    bool looksLikeBottomStrip(String s) => _cnFraction.hasMatch(s);
     bool needsRotation() =>
         _looksLikeOracleText(rawName) ||
         (rawName.isEmpty && blocks.isNotEmpty) ||
-        hasVerticalStripInNameBand(blocks);
+        hasVerticalStripInNameBand(blocks) ||
+        looksLikeBottomStrip(rawName);
     if (needsRotation()) {
       final decoded = img.decodeImage(uprightPng);
       if (decoded != null) {
@@ -228,6 +232,8 @@ class ScanPipeline {
       src.dispose();
     }
   }
+
+  static final _cnFraction = RegExp(r'\d+/\d+');
 
   static final _oracleKeywords = RegExp(
       r'\b(mana|creature|target|counter|damage|draw|discard|exile|sacrifice|'
