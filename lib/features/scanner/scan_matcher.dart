@@ -57,23 +57,28 @@ class ScanMatcher {
       }
     }
 
-    // Path 2: The List lookup (only when caller detected the List icon) +
-    // plain set + cn.
+    // Path 2: setCode + each candidate collector number. Iterates all cn
+    // candidates — the primary cn is frequently noise (year numbers, mana
+    // cost glyphs), so a secondary candidate often holds the real cn. List
+    // lookup fires only for the primary cn, since the icon hint correlates
+    // with the printed number directly under the set symbol.
     final primaryCn = parsed.collectorNumber;
-    if (!done() && parsed.setCode != null && primaryCn != null) {
-      if (isListCard) {
-        try {
-          final listCn = '${parsed.setCode!}-$primaryCn'.toLowerCase();
-          consider([await scry.cardBySetAndNumber('plst', listCn)]);
-        } on ScryfallNotFound {
-          // Not on The List — continue.
+    if (!done() && parsed.setCode != null) {
+      for (final cn in candidates) {
+        if (done()) break;
+        if (isListCard && cn == primaryCn) {
+          try {
+            final listCn = '${parsed.setCode!}-$cn'.toLowerCase();
+            consider([await scry.cardBySetAndNumber('plst', listCn)]);
+          } on ScryfallNotFound {
+            // Not on The List — continue.
+          }
+          if (done()) break;
         }
-      }
-      if (!done()) {
         try {
-          consider([await scry.cardBySetAndNumber(parsed.setCode!, primaryCn)]);
+          consider([await scry.cardBySetAndNumber(parsed.setCode!, cn)]);
         } on ScryfallNotFound {
-          // Continue to fuzzy.
+          // Try next candidate, or fall through.
         }
       }
     }
@@ -155,15 +160,24 @@ class ScanMatcher {
 
   static final _nonAlphaNum = RegExp(r'[^a-z0-9 ]');
 
-  /// Normalized Levenshtein similarity, 0..1 (1 = identical).
+  /// Normalized Levenshtein similarity, 0..1 (1 = identical). For
+  /// adventure / DFC / split cards Scryfall returns a compound "Front //
+  /// Back" name but OCR only ever sees the front face; we strip anything
+  /// after `//` on both sides before comparing.
   static double _nameSimilarity(String a, String b) {
-    final na = a.toLowerCase().replaceAll(_nonAlphaNum, '').trim();
-    final nb = b.toLowerCase().replaceAll(_nonAlphaNum, '').trim();
+    final na = _normalizeFace(a);
+    final nb = _normalizeFace(b);
     if (na.isEmpty && nb.isEmpty) return 1.0;
     if (na.isEmpty || nb.isEmpty) return 0.0;
     final dist = _levenshtein(na, nb);
     final longest = na.length > nb.length ? na.length : nb.length;
     return 1.0 - dist / longest;
+  }
+
+  static String _normalizeFace(String s) {
+    final split = s.indexOf('//');
+    final face = split >= 0 ? s.substring(0, split) : s;
+    return face.toLowerCase().replaceAll(_nonAlphaNum, '').trim();
   }
 
   static int _levenshtein(String a, String b) {

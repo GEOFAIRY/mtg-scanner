@@ -239,4 +239,50 @@ void main() {
 
     expect(r, isNull);
   });
+
+  test('scoring accepts compound-name cards when OCR only sees the front face',
+      () async {
+    // Adventure/DFC/split cards: Scryfall returns the full compound name
+    // (e.g. "Cruel Somnophage // Can't Wake Up"), but OCR only ever reads
+    // the front face. Without face-stripping, nameSim is ~0.55, and the
+    // score on a name-only match caps at 0.5 * 0.55 = 0.275 — rejected.
+    // With face-stripping, nameSim is 1.0, score caps at 0.5 — accepted.
+    final compound = ScryfallCard(
+      id: 'sid-woe-222',
+      name: "Cruel Somnophage // Can't Wake Up",
+      set: 'woe',
+      setName: 'Wilds of Eldraine',
+      collectorNumber: '222',
+      rarity: 'rare',
+      prices: ScryfallPrices(usd: 0.72, usdFoil: 0.82),
+    );
+    when(() => scry.cardByFuzzyName('Cruel Somnophage'))
+        .thenAnswer((_) async => compound);
+    final r = await matcher.match(ParsedOcr.from(
+        rawName: 'Cruel Somnophage', rawSetCollector: ''));
+    expect(r, isNotNull);
+    expect(r!.collectorNumber, '222');
+  });
+
+  test('set+cn path iterates alternate cn candidates when primary misses',
+      () async {
+    // OCR'd "WOE 137 222" — primary cn "137" is wrong, "222" is right.
+    // name+cn fails for both. Old behavior: path 2 tries only primary cn
+    // "137", fails, falls to fuzzy. New behavior: path 2 iterates all cn
+    // candidates and succeeds on "222".
+    when(() => scry.cardsByNameAndCollectorNumber(any(), any()))
+        .thenAnswer((_) async => <ScryfallCard>[]);
+    when(() => scry.cardBySetAndNumber('WOE', '137'))
+        .thenThrow(ScryfallNotFound('woe/137'));
+    when(() => scry.cardBySetAndNumber('WOE', '222'))
+        .thenAnswer((_) async => _card(set: 'woe', cn: '222'));
+    // Fuzzy would otherwise rescue under the old code; stub it to 404 so
+    // this test isolates the path 2 iteration behavior.
+    when(() => scry.cardByFuzzyName(any()))
+        .thenThrow(ScryfallNotFound('fuzzy'));
+    final r = await matcher.match(ParsedOcr.from(
+        rawName: 'Lightning Bolt', rawSetCollector: 'WOE 137 222'));
+    expect(r, isNotNull);
+    expect(r!.collectorNumber, '222');
+  });
 }
