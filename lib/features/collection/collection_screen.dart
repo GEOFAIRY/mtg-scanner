@@ -1,16 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../app_settings.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/collection_repository.dart';
+import '../../shared/pricing.dart';
 import '../../shared/widgets/price_text.dart';
 import '../../shared/widgets/set_icon.dart';
 
 enum _Sort { set, nameAsc, priceDesc, dateDesc }
 
 class CollectionScreen extends StatefulWidget {
-  const CollectionScreen({required this.repo, super.key});
+  const CollectionScreen({
+    required this.repo,
+    required this.settings,
+    super.key,
+  });
   final CollectionRepository repo;
+  final AppSettings settings;
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
 }
@@ -19,9 +26,24 @@ class _CollectionScreenState extends State<CollectionScreen> {
   String _query = '';
   _Sort _sort = _Sort.set;
 
-  double _rowPrice(CollectionData r) => r.foil == 1
-      ? (r.priceUsdFoil ?? r.priceUsd ?? 0)
-      : (r.priceUsd ?? 0);
+  @override
+  void initState() {
+    super.initState();
+    widget.settings.addListener(_onSettingsChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.settings.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  double _rowPrice(CollectionData r) =>
+      priceForRow(r, widget.settings.priceRegion) ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +98,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             }
           });
           final total = rows.fold<double>(0, (s, r) => s + _rowPrice(r) * r.count);
+          final region = widget.settings.priceRegion;
           return Column(
             children: [
               Padding(
@@ -95,7 +118,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Showing ${rows.length} cards · \$${total.toStringAsFixed(2)}',
+                    'Showing ${rows.length} cards · ${region.symbol}${total.toStringAsFixed(2)}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -143,7 +166,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
                         ],
                       ),
                       trailing: PriceText(
-                        usd: r.foil == 1 ? (r.priceUsdFoil ?? r.priceUsd) : r.priceUsd,
+                        price: priceForRow(r, region),
+                        region: region,
                         updatedAt: r.priceUpdatedAt,
                       ),
                       onTap: () => context.go('/collection/${r.id}'),

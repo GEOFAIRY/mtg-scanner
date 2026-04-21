@@ -23,6 +23,8 @@ class BackupRestoreService {
               'added_at': r.addedAt.toIso8601String(),
               'price_usd': r.priceUsd,
               'price_usd_foil': r.priceUsdFoil,
+              'price_eur': r.priceEur,
+              'price_eur_foil': r.priceEurFoil,
               'price_updated_at': r.priceUpdatedAt?.toIso8601String(),
               'notes': r.notes,
             })

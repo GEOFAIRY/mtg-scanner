@@ -13,6 +13,8 @@ class Collection extends Table {
   DateTimeColumn get addedAt => dateTime()();
   RealColumn get priceUsd => real().nullable()();
   RealColumn get priceUsdFoil => real().nullable()();
+  RealColumn get priceEur => real().nullable()();
+  RealColumn get priceEurFoil => real().nullable()();
   DateTimeColumn get priceUpdatedAt => dateTime().nullable()();
   TextColumn get notes => text().nullable()();
   TextColumn get rarity => text().nullable()();

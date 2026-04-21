@@ -86,7 +86,7 @@ void main() {
         ]);
   }
 
-  test('matched outcome adds to collection and returns id + price', () async {
+  test('matched outcome adds to collection and returns id', () async {
     stubOcr();
     when(() => matcher.match(any(),
             isListCard: any(named: 'isListCard'),
@@ -98,7 +98,7 @@ void main() {
 
     expect(res.outcome, CaptureOutcome.matched);
     expect(res.card?.name, 'Lightning Bolt');
-    expect(res.price, 1.80);
+    expect(res.card?.prices.usd, 1.80);
     expect(res.wasInsertion, isTrue);
     expect(res.collectionId, isNotNull);
 
@@ -107,7 +107,7 @@ void main() {
     expect(rows.single.id, res.collectionId);
   });
 
-  test('matched outcome with forceFoil picks foil price', () async {
+  test('matched outcome with forceFoil reports foil=true', () async {
     stubOcr();
     when(() => matcher.match(any(),
             isListCard: any(named: 'isListCard'),
@@ -117,22 +117,8 @@ void main() {
     final res =
         await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
 
-    expect(res.price, 5.50);
+    expect(res.card?.prices.usdFoil, 5.50);
     expect(res.foil, isTrue);
-  });
-
-  test('matched outcome falls back to non-foil when foil price is null',
-      () async {
-    stubOcr();
-    when(() => matcher.match(any(),
-            isListCard: any(named: 'isListCard'),
-            speculativeFuzzy: any(named: 'speculativeFuzzy')))
-        .thenAnswer((_) async => _card(usd: 1.80, usdFoil: null));
-
-    final res =
-        await pipeline().captureFromWarpedCrop(Uint8List(4), forceFoil: true);
-
-    expect(res.price, 1.80);
   });
 
   test('matched outcome reports wasInsertion=false on second scan', () async {

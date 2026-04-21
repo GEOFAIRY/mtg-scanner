@@ -5,6 +5,7 @@
 - **Plan B1:** done — camera capture, opencv rectangle + stability, landscape-aware warp, ML-Kit OCR populates `rawName`/`rawSetCollector` and a thumbnail.
 - **Plan B2:** done — `ScanMatcher` runs Scryfall lookup after each capture. `/cards/{set}/{number}` hit → confidence 1.0, auto-confirm to collection. Fuzzy-name fallback → 0.6, stays in review queue. Failure → 0.0, raw OCR shown so user can Edit.
 - **Plan B3:** done — lightweight HSV-saturation foil heuristic writes `foilGuess` on each scan. Accuracy is weak (single-frame signal, as the spec warned); the manual foil switch in the review queue remains the authoritative control.
+- **Regional pricing (2026-04-21):** done — Scryfall `eur`/`eur_foil` parsed; Drift schema v4 adds `priceEur` + `priceEurFoil`. `PriceRegion` enum (usd, eur) in `AppSettings` persists via SharedPreferences; Settings screen has a region selector. All price surfaces (collection list + total, detail, printing picker, scan banner, value-alert threshold) read `settings.priceRegion` and re-render live on change. No GBP — Scryfall doesn't expose it and FX conversion was rejected as inaccurate.
 
 ## What works end-to-end today
 - Point camera → card auto-detects → pipeline runs Scryfall match → either auto-confirms to collection (with live USD price) or lands in the review queue at 60% for user confirmation.

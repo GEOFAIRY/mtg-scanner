@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../app_settings.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
@@ -20,6 +21,7 @@ class EditScanModal extends StatefulWidget {
     required this.collection,
     required this.scry,
     required this.collectionId,
+    required this.settings,
     super.key,
   });
   final ScryfallCard initialCard;
@@ -28,6 +30,7 @@ class EditScanModal extends StatefulWidget {
   final CollectionRepository collection;
   final ScryfallClient scry;
   final int collectionId;
+  final AppSettings settings;
 
   @override
   State<EditScanModal> createState() => _EditScanModalState();
@@ -275,6 +278,7 @@ class _EditScanModalState extends State<EditScanModal> {
                           key: ValueKey(_pickedName),
                           name: _pickedName!,
                           scry: widget.scry,
+                          region: widget.settings.priceRegion,
                           selectedId:
                               _card.name == _pickedName ? _card.id : null,
                           onPick: _onPrintingPicked,

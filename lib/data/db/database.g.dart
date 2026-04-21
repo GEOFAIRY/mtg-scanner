@@ -141,6 +141,28 @@ class $CollectionTable extends Collection
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _priceEurMeta = const VerificationMeta(
+    'priceEur',
+  );
+  @override
+  late final GeneratedColumn<double> priceEur = GeneratedColumn<double>(
+    'price_eur',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceEurFoilMeta = const VerificationMeta(
+    'priceEurFoil',
+  );
+  @override
+  late final GeneratedColumn<double> priceEurFoil = GeneratedColumn<double>(
+    'price_eur_foil',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _priceUpdatedAtMeta = const VerificationMeta(
     'priceUpdatedAt',
   );
@@ -196,6 +218,8 @@ class $CollectionTable extends Collection
     addedAt,
     priceUsd,
     priceUsdFoil,
+    priceEur,
+    priceEurFoil,
     priceUpdatedAt,
     notes,
     rarity,
@@ -298,6 +322,21 @@ class $CollectionTable extends Collection
         ),
       );
     }
+    if (data.containsKey('price_eur')) {
+      context.handle(
+        _priceEurMeta,
+        priceEur.isAcceptableOrUnknown(data['price_eur']!, _priceEurMeta),
+      );
+    }
+    if (data.containsKey('price_eur_foil')) {
+      context.handle(
+        _priceEurFoilMeta,
+        priceEurFoil.isAcceptableOrUnknown(
+          data['price_eur_foil']!,
+          _priceEurFoilMeta,
+        ),
+      );
+    }
     if (data.containsKey('price_updated_at')) {
       context.handle(
         _priceUpdatedAtMeta,
@@ -382,6 +421,14 @@ class $CollectionTable extends Collection
         DriftSqlType.double,
         data['${effectivePrefix}price_usd_foil'],
       ),
+      priceEur: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}price_eur'],
+      ),
+      priceEurFoil: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}price_eur_foil'],
+      ),
       priceUpdatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}price_updated_at'],
@@ -420,6 +467,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
   final DateTime addedAt;
   final double? priceUsd;
   final double? priceUsdFoil;
+  final double? priceEur;
+  final double? priceEurFoil;
   final DateTime? priceUpdatedAt;
   final String? notes;
   final String? rarity;
@@ -437,6 +486,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     required this.addedAt,
     this.priceUsd,
     this.priceUsdFoil,
+    this.priceEur,
+    this.priceEurFoil,
     this.priceUpdatedAt,
     this.notes,
     this.rarity,
@@ -460,6 +511,12 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     }
     if (!nullToAbsent || priceUsdFoil != null) {
       map['price_usd_foil'] = Variable<double>(priceUsdFoil);
+    }
+    if (!nullToAbsent || priceEur != null) {
+      map['price_eur'] = Variable<double>(priceEur);
+    }
+    if (!nullToAbsent || priceEurFoil != null) {
+      map['price_eur_foil'] = Variable<double>(priceEurFoil);
     }
     if (!nullToAbsent || priceUpdatedAt != null) {
       map['price_updated_at'] = Variable<DateTime>(priceUpdatedAt);
@@ -494,6 +551,12 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       priceUsdFoil: priceUsdFoil == null && nullToAbsent
           ? const Value.absent()
           : Value(priceUsdFoil),
+      priceEur: priceEur == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceEur),
+      priceEurFoil: priceEurFoil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceEurFoil),
       priceUpdatedAt: priceUpdatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(priceUpdatedAt),
@@ -527,6 +590,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
       priceUsd: serializer.fromJson<double?>(json['priceUsd']),
       priceUsdFoil: serializer.fromJson<double?>(json['priceUsdFoil']),
+      priceEur: serializer.fromJson<double?>(json['priceEur']),
+      priceEurFoil: serializer.fromJson<double?>(json['priceEurFoil']),
       priceUpdatedAt: serializer.fromJson<DateTime?>(json['priceUpdatedAt']),
       notes: serializer.fromJson<String?>(json['notes']),
       rarity: serializer.fromJson<String?>(json['rarity']),
@@ -549,6 +614,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       'addedAt': serializer.toJson<DateTime>(addedAt),
       'priceUsd': serializer.toJson<double?>(priceUsd),
       'priceUsdFoil': serializer.toJson<double?>(priceUsdFoil),
+      'priceEur': serializer.toJson<double?>(priceEur),
+      'priceEurFoil': serializer.toJson<double?>(priceEurFoil),
       'priceUpdatedAt': serializer.toJson<DateTime?>(priceUpdatedAt),
       'notes': serializer.toJson<String?>(notes),
       'rarity': serializer.toJson<String?>(rarity),
@@ -569,6 +636,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     DateTime? addedAt,
     Value<double?> priceUsd = const Value.absent(),
     Value<double?> priceUsdFoil = const Value.absent(),
+    Value<double?> priceEur = const Value.absent(),
+    Value<double?> priceEurFoil = const Value.absent(),
     Value<DateTime?> priceUpdatedAt = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<String?> rarity = const Value.absent(),
@@ -586,6 +655,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     addedAt: addedAt ?? this.addedAt,
     priceUsd: priceUsd.present ? priceUsd.value : this.priceUsd,
     priceUsdFoil: priceUsdFoil.present ? priceUsdFoil.value : this.priceUsdFoil,
+    priceEur: priceEur.present ? priceEur.value : this.priceEur,
+    priceEurFoil: priceEurFoil.present ? priceEurFoil.value : this.priceEurFoil,
     priceUpdatedAt: priceUpdatedAt.present
         ? priceUpdatedAt.value
         : this.priceUpdatedAt,
@@ -613,6 +684,10 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
       priceUsdFoil: data.priceUsdFoil.present
           ? data.priceUsdFoil.value
           : this.priceUsdFoil,
+      priceEur: data.priceEur.present ? data.priceEur.value : this.priceEur,
+      priceEurFoil: data.priceEurFoil.present
+          ? data.priceEurFoil.value
+          : this.priceEurFoil,
       priceUpdatedAt: data.priceUpdatedAt.present
           ? data.priceUpdatedAt.value
           : this.priceUpdatedAt,
@@ -639,6 +714,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
           ..write('addedAt: $addedAt, ')
           ..write('priceUsd: $priceUsd, ')
           ..write('priceUsdFoil: $priceUsdFoil, ')
+          ..write('priceEur: $priceEur, ')
+          ..write('priceEurFoil: $priceEurFoil, ')
           ..write('priceUpdatedAt: $priceUpdatedAt, ')
           ..write('notes: $notes, ')
           ..write('rarity: $rarity, ')
@@ -661,6 +738,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
     addedAt,
     priceUsd,
     priceUsdFoil,
+    priceEur,
+    priceEurFoil,
     priceUpdatedAt,
     notes,
     rarity,
@@ -682,6 +761,8 @@ class CollectionData extends DataClass implements Insertable<CollectionData> {
           other.addedAt == this.addedAt &&
           other.priceUsd == this.priceUsd &&
           other.priceUsdFoil == this.priceUsdFoil &&
+          other.priceEur == this.priceEur &&
+          other.priceEurFoil == this.priceEurFoil &&
           other.priceUpdatedAt == this.priceUpdatedAt &&
           other.notes == this.notes &&
           other.rarity == this.rarity &&
@@ -701,6 +782,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
   final Value<DateTime> addedAt;
   final Value<double?> priceUsd;
   final Value<double?> priceUsdFoil;
+  final Value<double?> priceEur;
+  final Value<double?> priceEurFoil;
   final Value<DateTime?> priceUpdatedAt;
   final Value<String?> notes;
   final Value<String?> rarity;
@@ -718,6 +801,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     this.addedAt = const Value.absent(),
     this.priceUsd = const Value.absent(),
     this.priceUsdFoil = const Value.absent(),
+    this.priceEur = const Value.absent(),
+    this.priceEurFoil = const Value.absent(),
     this.priceUpdatedAt = const Value.absent(),
     this.notes = const Value.absent(),
     this.rarity = const Value.absent(),
@@ -736,6 +821,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     required DateTime addedAt,
     this.priceUsd = const Value.absent(),
     this.priceUsdFoil = const Value.absent(),
+    this.priceEur = const Value.absent(),
+    this.priceEurFoil = const Value.absent(),
     this.priceUpdatedAt = const Value.absent(),
     this.notes = const Value.absent(),
     this.rarity = const Value.absent(),
@@ -758,6 +845,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     Expression<DateTime>? addedAt,
     Expression<double>? priceUsd,
     Expression<double>? priceUsdFoil,
+    Expression<double>? priceEur,
+    Expression<double>? priceEurFoil,
     Expression<DateTime>? priceUpdatedAt,
     Expression<String>? notes,
     Expression<String>? rarity,
@@ -776,6 +865,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
       if (addedAt != null) 'added_at': addedAt,
       if (priceUsd != null) 'price_usd': priceUsd,
       if (priceUsdFoil != null) 'price_usd_foil': priceUsdFoil,
+      if (priceEur != null) 'price_eur': priceEur,
+      if (priceEurFoil != null) 'price_eur_foil': priceEurFoil,
       if (priceUpdatedAt != null) 'price_updated_at': priceUpdatedAt,
       if (notes != null) 'notes': notes,
       if (rarity != null) 'rarity': rarity,
@@ -796,6 +887,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     Value<DateTime>? addedAt,
     Value<double?>? priceUsd,
     Value<double?>? priceUsdFoil,
+    Value<double?>? priceEur,
+    Value<double?>? priceEurFoil,
     Value<DateTime?>? priceUpdatedAt,
     Value<String?>? notes,
     Value<String?>? rarity,
@@ -814,6 +907,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
       addedAt: addedAt ?? this.addedAt,
       priceUsd: priceUsd ?? this.priceUsd,
       priceUsdFoil: priceUsdFoil ?? this.priceUsdFoil,
+      priceEur: priceEur ?? this.priceEur,
+      priceEurFoil: priceEurFoil ?? this.priceEurFoil,
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
       notes: notes ?? this.notes,
       rarity: rarity ?? this.rarity,
@@ -860,6 +955,12 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
     if (priceUsdFoil.present) {
       map['price_usd_foil'] = Variable<double>(priceUsdFoil.value);
     }
+    if (priceEur.present) {
+      map['price_eur'] = Variable<double>(priceEur.value);
+    }
+    if (priceEurFoil.present) {
+      map['price_eur_foil'] = Variable<double>(priceEurFoil.value);
+    }
     if (priceUpdatedAt.present) {
       map['price_updated_at'] = Variable<DateTime>(priceUpdatedAt.value);
     }
@@ -890,6 +991,8 @@ class CollectionCompanion extends UpdateCompanion<CollectionData> {
           ..write('addedAt: $addedAt, ')
           ..write('priceUsd: $priceUsd, ')
           ..write('priceUsdFoil: $priceUsdFoil, ')
+          ..write('priceEur: $priceEur, ')
+          ..write('priceEurFoil: $priceEurFoil, ')
           ..write('priceUpdatedAt: $priceUpdatedAt, ')
           ..write('notes: $notes, ')
           ..write('rarity: $rarity, ')
@@ -925,6 +1028,8 @@ typedef $$CollectionTableCreateCompanionBuilder =
       required DateTime addedAt,
       Value<double?> priceUsd,
       Value<double?> priceUsdFoil,
+      Value<double?> priceEur,
+      Value<double?> priceEurFoil,
       Value<DateTime?> priceUpdatedAt,
       Value<String?> notes,
       Value<String?> rarity,
@@ -944,6 +1049,8 @@ typedef $$CollectionTableUpdateCompanionBuilder =
       Value<DateTime> addedAt,
       Value<double?> priceUsd,
       Value<double?> priceUsdFoil,
+      Value<double?> priceEur,
+      Value<double?> priceEurFoil,
       Value<DateTime?> priceUpdatedAt,
       Value<String?> notes,
       Value<String?> rarity,
@@ -1016,6 +1123,16 @@ class $$CollectionTableFilterComposer
 
   ColumnFilters<double> get priceUsdFoil => $composableBuilder(
     column: $table.priceUsdFoil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get priceEur => $composableBuilder(
+    column: $table.priceEur,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1109,6 +1226,16 @@ class $$CollectionTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get priceEur => $composableBuilder(
+    column: $table.priceEur,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get priceUpdatedAt => $composableBuilder(
     column: $table.priceUpdatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -1181,6 +1308,14 @@ class $$CollectionTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get priceEur =>
+      $composableBuilder(column: $table.priceEur, builder: (column) => column);
+
+  GeneratedColumn<double> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get priceUpdatedAt => $composableBuilder(
     column: $table.priceUpdatedAt,
     builder: (column) => column,
@@ -1241,6 +1376,8 @@ class $$CollectionTableTableManager
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<double?> priceUsd = const Value.absent(),
                 Value<double?> priceUsdFoil = const Value.absent(),
+                Value<double?> priceEur = const Value.absent(),
+                Value<double?> priceEurFoil = const Value.absent(),
                 Value<DateTime?> priceUpdatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
@@ -1258,6 +1395,8 @@ class $$CollectionTableTableManager
                 addedAt: addedAt,
                 priceUsd: priceUsd,
                 priceUsdFoil: priceUsdFoil,
+                priceEur: priceEur,
+                priceEurFoil: priceEurFoil,
                 priceUpdatedAt: priceUpdatedAt,
                 notes: notes,
                 rarity: rarity,
@@ -1277,6 +1416,8 @@ class $$CollectionTableTableManager
                 required DateTime addedAt,
                 Value<double?> priceUsd = const Value.absent(),
                 Value<double?> priceUsdFoil = const Value.absent(),
+                Value<double?> priceEur = const Value.absent(),
+                Value<double?> priceEurFoil = const Value.absent(),
                 Value<DateTime?> priceUpdatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
@@ -1294,6 +1435,8 @@ class $$CollectionTableTableManager
                 addedAt: addedAt,
                 priceUsd: priceUsd,
                 priceUsdFoil: priceUsdFoil,
+                priceEur: priceEur,
+                priceEurFoil: priceEurFoil,
                 priceUpdatedAt: priceUpdatedAt,
                 notes: notes,
                 rarity: rarity,
@@ -1331,4 +1474,3 @@ class $AppDatabaseManager {
   $$CollectionTableTableManager get collection =>
       $$CollectionTableTableManager(_db, _db.collection);
 }
-

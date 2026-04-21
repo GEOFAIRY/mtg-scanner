@@ -1,11 +1,15 @@
 class ScryfallPrices {
-  ScryfallPrices({this.usd, this.usdFoil});
+  ScryfallPrices({this.usd, this.usdFoil, this.eur, this.eurFoil});
   final double? usd;
   final double? usdFoil;
+  final double? eur;
+  final double? eurFoil;
 
   factory ScryfallPrices.fromJson(Map<String, dynamic> j) => ScryfallPrices(
         usd: _parseDouble(j['usd']),
         usdFoil: _parseDouble(j['usd_foil']),
+        eur: _parseDouble(j['eur']),
+        eurFoil: _parseDouble(j['eur_foil']),
       );
 
   static double? _parseDouble(Object? v) =>

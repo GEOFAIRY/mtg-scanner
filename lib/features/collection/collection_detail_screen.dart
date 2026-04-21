@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../app_settings.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
+import '../../shared/pricing.dart';
 import '../../shared/widgets/price_text.dart';
 import '../../shared/widgets/set_icon.dart';
 import '../scanner/edit_scan_modal.dart';
@@ -15,11 +17,13 @@ class CollectionDetailScreen extends StatefulWidget {
     required this.id,
     required this.repo,
     required this.scry,
+    required this.settings,
     super.key,
   });
   final int id;
   final CollectionRepository repo;
   final ScryfallClient scry;
+  final AppSettings settings;
   @override
   State<CollectionDetailScreen> createState() => _CollectionDetailScreenState();
 }
@@ -32,6 +36,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   String? _loadedCollectorNumber;
   late int _count;
   bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.settings.addListener(_onSettingsChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.settings.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<ScryfallCard?> _loadCard(CollectionData r) async {
     try {
@@ -115,6 +135,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           collection: widget.repo,
           scry: widget.scry,
           collectionId: r.id,
+          settings: widget.settings,
         ),
       ),
     );
@@ -214,7 +235,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               ),
               const SizedBox(height: 8),
               PriceText(
-                usd: r.foil == 1 ? (r.priceUsdFoil ?? r.priceUsd) : r.priceUsd,
+                price: priceForRow(r, widget.settings.priceRegion),
+                region: widget.settings.priceRegion,
                 updatedAt: r.priceUpdatedAt,
               ),
               const Spacer(),

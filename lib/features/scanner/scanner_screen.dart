@@ -9,6 +9,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 import '../../app_settings.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../data/scryfall/scryfall_client.dart';
+import '../../shared/pricing.dart';
 import 'edit_scan_modal.dart';
 import 'frame_budget.dart';
 import 'perspective_correct.dart';
@@ -318,16 +319,19 @@ class _ScannerBodyState extends State<_ScannerBody>
           }
           _lastMatchedCardId = res.card!.id;
           _lastMatchedAt = now;
+          final region = widget.settings.priceRegion;
+          final bannerPrice = priceForCard(res.card!, res.foil, region);
           _banner.value = BannerData(
             collectionId: res.collectionId!,
             card: res.card!,
-            price: res.price,
+            price: bannerPrice,
+            region: region,
             foil: res.foil,
             wasInsertion: res.wasInsertion,
           );
           _state.toSearching();
-          final isValueAlert = res.price != null &&
-              res.price! > widget.settings.valueAlertThreshold;
+          final isValueAlert = bannerPrice != null &&
+              bannerPrice > widget.settings.valueAlertThreshold;
           unawaited(_playScanFeedback(valueAlert: isValueAlert));
           _tracker.reset();
           return;
@@ -398,16 +402,19 @@ class _ScannerBodyState extends State<_ScannerBody>
           case CaptureOutcome.matched:
             _lastMatchedCardId = res.card!.id;
             _lastMatchedAt = DateTime.now();
+            final region = widget.settings.priceRegion;
+            final bannerPrice = priceForCard(res.card!, res.foil, region);
             _banner.value = BannerData(
               collectionId: res.collectionId!,
               card: res.card!,
-              price: res.price,
+              price: bannerPrice,
+              region: region,
               foil: res.foil,
               wasInsertion: res.wasInsertion,
             );
             _state.toSearching();
-            final isValueAlert = res.price != null &&
-                res.price! > widget.settings.valueAlertThreshold;
+            final isValueAlert = bannerPrice != null &&
+                bannerPrice > widget.settings.valueAlertThreshold;
             unawaited(_playScanFeedback(valueAlert: isValueAlert));
           case CaptureOutcome.noMatch:
             _state.toNoMatch();
@@ -481,6 +488,7 @@ class _ScannerBodyState extends State<_ScannerBody>
             collectionId: result.id,
             card: d.card,
             price: d.price,
+            region: d.region,
             foil: d.foil,
             wasInsertion: result.wasInsertion,
           );
@@ -507,19 +515,18 @@ class _ScannerBodyState extends State<_ScannerBody>
           collection: widget.collection,
           scry: widget.scry,
           collectionId: d.collectionId,
+          settings: widget.settings,
         ),
       ),
     );
     if (!mounted) return;
     if (result != null) {
+      final region = widget.settings.priceRegion;
       _banner.value = BannerData(
         collectionId: d.collectionId,
         card: result.card,
-        price: (result.foil
-                ? result.card.prices.usdFoil
-                : result.card.prices.usd) ??
-            result.card.prices.usd ??
-            result.card.prices.usdFoil,
+        price: priceForCard(result.card, result.foil, region),
+        region: region,
         foil: result.foil,
         wasInsertion: d.wasInsertion,
       );

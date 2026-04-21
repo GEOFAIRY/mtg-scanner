@@ -14,4 +14,3 @@ class CollectionDaoManager {
   $$CollectionTableTableManager get collection =>
       $$CollectionTableTableManager(_db.attachedDatabase, _db.collection);
 }
-

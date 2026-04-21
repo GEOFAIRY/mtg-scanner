@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../app_settings.dart';
 import '../../data/scryfall/scryfall_models.dart';
 
 class BannerData {
@@ -7,12 +8,14 @@ class BannerData {
     required this.collectionId,
     required this.card,
     required this.price,
+    required this.region,
     required this.foil,
     required this.wasInsertion,
   });
   final int collectionId;
   final ScryfallCard card;
   final double? price;
+  final PriceRegion region;
   final bool foil;
   final bool wasInsertion;
 }
@@ -37,7 +40,7 @@ class ResultBanner extends StatelessWidget {
       card.set.toUpperCase(),
       card.collectorNumber,
       if (card.rarity != null) card.rarity!,
-      if (d.price != null) '\$${d.price!.toStringAsFixed(2)}',
+      if (d.price != null) '${d.region.symbol}${d.price!.toStringAsFixed(2)}',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),

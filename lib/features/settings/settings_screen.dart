@@ -74,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _editThreshold() async {
+    final region = widget.settings.priceRegion;
     final ctrl = TextEditingController(
         text: widget.settings.valueAlertThreshold.toStringAsFixed(2));
     final result = await showDialog<double>(
@@ -84,9 +85,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           controller: ctrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
-          decoration: const InputDecoration(
-            prefixText: r'$ ',
-            helperText: 'Sound plays when scanned card is above this USD value',
+          decoration: InputDecoration(
+            prefixText: '${region.symbol} ',
+            helperText:
+                'Sound plays when scanned card is above this ${region.name.toUpperCase()} value',
           ),
         ),
         actions: [
@@ -104,6 +106,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (result != null) await widget.settings.setValueAlertThreshold(result);
+  }
+
+  Future<void> _editPriceRegion() async {
+    final current = widget.settings.priceRegion;
+    final result = await showDialog<PriceRegion>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Price region'),
+        children: [
+          RadioGroup<PriceRegion>(
+            groupValue: current,
+            onChanged: (r) => Navigator.of(ctx).pop(r),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final r in PriceRegion.values)
+                  RadioListTile<PriceRegion>(
+                    value: r,
+                    title: Text(r.label),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (result != null) await widget.settings.setPriceRegion(result);
   }
 
   Future<void> _editThemeMode() async {
@@ -161,9 +190,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
           ListTile(
+            title: const Text('Price region'),
+            subtitle: Text(widget.settings.priceRegion.label),
+            leading: const Icon(Icons.public),
+            onTap: _editPriceRegion,
+          ),
+          const Divider(),
+          ListTile(
             title: const Text('Value alert threshold'),
             subtitle: Text(
-                r'$' '${widget.settings.valueAlertThreshold.toStringAsFixed(2)}'),
+                '${widget.settings.priceRegion.symbol}${widget.settings.valueAlertThreshold.toStringAsFixed(2)}'),
             leading: const Icon(Icons.notifications_active),
             onTap: _editThreshold,
           ),

@@ -1,18 +1,22 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../app_settings.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/scryfall/scryfall_models.dart';
+import '../pricing.dart';
 
 class PrintingPicker extends StatefulWidget {
   const PrintingPicker({
     required this.name,
     required this.scry,
+    required this.region,
     required this.onPick,
     this.selectedId,
     super.key,
   });
   final String name;
   final ScryfallClient scry;
+  final PriceRegion region;
   final void Function(ScryfallCard) onPick;
   final String? selectedId;
 
@@ -95,9 +99,10 @@ class _PrintingPickerState extends State<PrintingPicker> {
                   itemBuilder: (_, i) {
                     final p = printings[i];
                     final selected = p.id == widget.selectedId;
-                    final price = p.prices.usd == null
+                    final priceValue = priceForCard(p, false, widget.region);
+                    final price = priceValue == null
                         ? '—'
-                        : '\$${p.prices.usd!.toStringAsFixed(2)}';
+                        : '${widget.region.symbol}${priceValue.toStringAsFixed(2)}';
                     return Container(
                       color: selected
                           ? theme.colorScheme.primaryContainer

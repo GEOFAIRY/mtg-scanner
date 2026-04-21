@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../app_settings.dart';
 import '../../data/scryfall/scryfall_client.dart';
 import '../../data/repositories/collection_repository.dart';
 import '../../shared/widgets/printing_picker.dart';
 
 class ManualAddScreen extends StatefulWidget {
-  const ManualAddScreen({required this.scry, required this.collection, super.key});
+  const ManualAddScreen({
+    required this.scry,
+    required this.collection,
+    required this.settings,
+    super.key,
+  });
   final ScryfallClient scry;
   final CollectionRepository collection;
+  final AppSettings settings;
   @override
   State<ManualAddScreen> createState() => _ManualAddScreenState();
 }
@@ -76,6 +83,7 @@ class _ManualAddScreenState extends State<ManualAddScreen> {
                 : PrintingPicker(
                     name: _pickedName!,
                     scry: widget.scry,
+                    region: widget.settings.priceRegion,
                     onPick: (card) async {
                       await widget.collection.addFromScryfall(card, foil: _foil);
                       if (!context.mounted) return;

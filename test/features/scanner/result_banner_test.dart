@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mtg_card_scanner/app_settings.dart';
 import 'package:mtg_card_scanner/data/scryfall/scryfall_models.dart';
 import 'package:mtg_card_scanner/features/scanner/result_banner.dart';
 
@@ -13,17 +14,22 @@ ScryfallCard _card({String? rarity = 'uncommon'}) => ScryfallCard(
       prices: ScryfallPrices(usd: 1.80),
     );
 
+BannerData _banner({ScryfallCard? card, PriceRegion region = PriceRegion.usd}) =>
+    BannerData(
+      collectionId: 1,
+      card: card ?? _card(),
+      price: 1.80,
+      region: region,
+      foil: false,
+      wasInsertion: true,
+    );
+
 void main() {
   Widget host(ResultBanner b) => MaterialApp(home: Scaffold(body: b));
 
-  testWidgets('renders name, subtitle, and price', (tester) async {
+  testWidgets('renders name, subtitle, and USD price', (tester) async {
     await tester.pumpWidget(host(ResultBanner(
-      data: BannerData(
-          collectionId: 1,
-          card: _card(),
-          price: 1.80,
-          foil: false,
-          wasInsertion: true),
+      data: _banner(),
       onDismiss: () {},
       onEdit: () {},
     )));
@@ -34,14 +40,18 @@ void main() {
     expect(find.textContaining(r'$1.80'), findsOneWidget);
   });
 
+  testWidgets('renders EUR symbol when region is eur', (tester) async {
+    await tester.pumpWidget(host(ResultBanner(
+      data: _banner(region: PriceRegion.eur),
+      onDismiss: () {},
+      onEdit: () {},
+    )));
+    expect(find.textContaining('€1.80'), findsOneWidget);
+  });
+
   testWidgets('omits rarity segment when null', (tester) async {
     await tester.pumpWidget(host(ResultBanner(
-      data: BannerData(
-          collectionId: 1,
-          card: _card(rarity: null),
-          price: 1.80,
-          foil: false,
-          wasInsertion: true),
+      data: _banner(card: _card(rarity: null)),
       onDismiss: () {},
       onEdit: () {},
     )));
@@ -57,12 +67,7 @@ void main() {
   testWidgets('edit icon triggers onEdit', (tester) async {
     var edits = 0;
     await tester.pumpWidget(host(ResultBanner(
-      data: BannerData(
-          collectionId: 1,
-          card: _card(),
-          price: 1.80,
-          foil: false,
-          wasInsertion: true),
+      data: _banner(),
       onDismiss: () {},
       onEdit: () => edits++,
     )));
@@ -73,12 +78,7 @@ void main() {
   testWidgets('delete icon triggers onDismiss', (tester) async {
     var dismisses = 0;
     await tester.pumpWidget(host(ResultBanner(
-      data: BannerData(
-          collectionId: 1,
-          card: _card(),
-          price: 1.80,
-          foil: false,
-          wasInsertion: true),
+      data: _banner(),
       onDismiss: () => dismisses++,
       onEdit: () {},
     )));

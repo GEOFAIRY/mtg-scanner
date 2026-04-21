@@ -20,7 +20,6 @@ class CaptureResult {
   CaptureResult.matched({
     required this.collectionId,
     required this.card,
-    required this.price,
     required this.foil,
     required this.wasInsertion,
   })  : outcome = CaptureOutcome.matched,
@@ -32,7 +31,6 @@ class CaptureResult {
       : outcome = CaptureOutcome.noMatch,
         collectionId = null,
         card = null,
-        price = null,
         foil = false,
         wasInsertion = false;
 
@@ -40,7 +38,6 @@ class CaptureResult {
       : outcome = CaptureOutcome.offline,
         collectionId = null,
         card = null,
-        price = null,
         foil = false,
         wasInsertion = false,
         debugOcrName = null,
@@ -50,7 +47,6 @@ class CaptureResult {
   final CaptureOutcome outcome;
   final int? collectionId;
   final ScryfallCard? card;
-  final double? price;
   final bool foil;
   final bool wasInsertion;
   final String? debugOcrName;
@@ -205,11 +201,9 @@ class ScanPipeline {
     }
 
     final result = await collection.addFromScryfall(card, foil: foil);
-    final price = _selectPrice(card, foil);
     return CaptureResult.matched(
       collectionId: result.id,
       card: card,
-      price: price,
       foil: foil,
       wasInsertion: result.wasInsertion,
     );
@@ -320,13 +314,6 @@ class ScanPipeline {
         .toList()
       ..sort((a, b) => a.left.compareTo(b.left));
     return band.map((b) => b.text.replaceAll('\n', ' ')).join(' ');
-  }
-
-  static double? _selectPrice(ScryfallCard card, bool foil) {
-    final usd = card.prices.usd;
-    final usdFoil = card.prices.usdFoil;
-    if (foil) return usdFoil ?? usd;
-    return usd ?? usdFoil;
   }
 
   Future<ScryfallCard?> _startSpeculativeFuzzy(String name) async {

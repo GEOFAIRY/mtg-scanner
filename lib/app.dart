@@ -167,18 +167,23 @@ class _MtgScannerAppState extends State<MtgScannerApp> {
                   GoRoute(
                     path: 'add',
                     builder: (_, __) => ManualAddScreen(
-                        scry: deps.scry, collection: deps.collection),
+                      scry: deps.scry,
+                      collection: deps.collection,
+                      settings: deps.settings,
+                    ),
                   ),
                   GoRoute(
                     path: ':id',
                     builder: (ctx, st) => CollectionDetailScreen(
                       id: int.parse(st.pathParameters['id']!),
                       repo: deps.collection,
-                      scry: deps.scry
+                      scry: deps.scry,
+                      settings: deps.settings,
                     ),
                   ),
                 ],
-                builder: (_, __) => CollectionScreen(repo: deps.collection),
+                builder: (_, __) => CollectionScreen(
+                    repo: deps.collection, settings: deps.settings),
               ),
               GoRoute(
                 path: '/export',
